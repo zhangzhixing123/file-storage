@@ -1,30 +1,151 @@
 <!DOCTYPE html>
-<html>
-<head><title>快速测试</title></head>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>共享文件存储</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #667eea; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+        .login-card { background: white; border-radius: 24px; padding: 40px; width: 350px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+        .login-card h2 { margin-bottom: 10px; color: #333; }
+        .login-card p { color: #666; margin-bottom: 30px; font-size: 14px; }
+        .login-card input { width: 100%; padding: 14px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 12px; font-size: 16px; }
+        .login-card button { width: 100%; padding: 14px; background: #667eea; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; }
+        .error { color: #ff5252; margin-top: 12px; font-size: 14px; }
+        .app-container { display: none; min-height: 100vh; background: #f0f2f5; }
+        .header { background: #667eea; color: white; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .logout-btn { background: rgba(255,255,255,0.2); border: none; color: white; padding: 8px 16px; border-radius: 20px; cursor: pointer; }
+        .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; padding: 20px; }
+        .file-card { background: white; border-radius: 12px; overflow: hidden; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .file-card img { width: 100%; height: 150px; object-fit: cover; }
+        .file-card .info { padding: 12px; }
+        .file-card .name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .fab { position: fixed; bottom: 30px; right: 30px; width: 56px; height: 56px; border-radius: 28px; background: #667eea; border: none; color: white; font-size: 24px; cursor: pointer; }
+        .loading { text-align: center; padding: 60px; color: #999; }
+    </style>
+</head>
 <body>
-    <h1>Supabase 连接测试</h1>
-    <button onclick="test()">点击测试</button>
-    <div id="result"></div>
-    <script>
-        const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
-        const SUPABASE_KEY = 'sb_publicIsTable_onL4oY10_bv7tVNAirgaaA_oTUN---';
+
+<!-- 登录页面 -->
+<div id="loginContainer" class="login-card">
+    <h2>📁 共享文件存储</h2>
+    <p>统一密码 123456</p>
+    <input type="password" id="password" placeholder="请输入密码">
+    <button onclick="login()">登录</button>
+    <div id="errorMsg" class="error"></div>
+</div>
+
+<!-- 主界面 -->
+<div id="appContainer" class="app-container">
+    <div class="header">
+        <h2>📁 共享文件</h2>
+        <button class="logout-btn" onclick="logout()">退出</button>
+    </div>
+    <div id="fileList" class="file-grid">
+        <div class="loading">加载中...</div>
+    </div>
+    <button class="fab" onclick="selectFile()">+</button>
+    <input type="file" id="fileInput" style="display:none" multiple onchange="uploadFiles(this)">
+</div>
+
+<script>
+    // ========== 配置区域（请确认这两行正确） ==========
+    const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
+    const SUPABASE_KEY = 'sb_publicIsTable_onL4oY10_bv7tVNAirgaaA_oTUN---';
+    const FIXED_PASSWORD = '123456';
+    
+    let supabase;
+
+    // 登录
+    async function login() {
+        const pwd = document.getElementById('password').value;
+        const errorDiv = document.getElementById('errorMsg');
         
-        async function test() {
-            const result = document.getElementById('result');
-            result.innerText = '请求中...';
-            try {
-                const resp = await fetch(SUPABASE_URL + '/storage/v1/bucket/files', {
-                    headers: { 'apikey': SUPABASE_KEY }
-                });
-                result.innerText = '状态码: ' + resp.status;
-                if (resp.status === 200) {
-                    const data = await resp.json();
-                    result.innerText += ' 成功！桶数量: ' + data.length;
-                }
-            } catch(e) {
-                result.innerText = '错误: ' + e.message;
+        if (pwd !== FIXED_PASSWORD) {
+            errorDiv.innerText = '密码错误！';
+            return;
+        }
+        
+        errorDiv.innerText = '';
+        
+        // 初始化 Supabase
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
+        // 隐藏登录页，显示主界面
+        document.getElementById('loginContainer').style.display = 'none';
+        document.getElementById('appContainer').style.display = 'block';
+        
+        // 加载文件列表
+        await loadFiles();
+    }
+    
+    function logout() {
+        document.getElementById('appContainer').style.display = 'none';
+        document.getElementById('loginContainer').style.display = 'block';
+        document.getElementById('password').value = '';
+    }
+    
+    // 加载文件列表
+    async function loadFiles() {
+        const container = document.getElementById('fileList');
+        container.innerHTML = '<div class="loading">加载中...</div>';
+        
+        try {
+            const { data, error } = await supabase.storage.from('files').list('', {
+                limit: 100,
+                sortBy: { column: 'created_at', order: 'desc' }
+            });
+            
+            if (error) throw error;
+            
+            if (!data || data.length === 0) {
+                container.innerHTML = '<div class="loading">暂无文件，点击 + 上传</div>';
+                return;
+            }
+            
+            container.innerHTML = data.map(file => {
+                const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
+                const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
+                return `
+                    <div class="file-card" onclick="window.open('${url}', '_blank')">
+                        ${isImage ? `<img src="${url}" onerror="this.src='https://placehold.co/150x150?text=图片'">` : `<div style="height:150px; background:#f0f0f0; display:flex; align-items:center; justify-content:center; font-size:40px;">📄</div>`}
+                        <div class="info">
+                            <div class="name">${file.name.length > 20 ? file.name.slice(0,17)+'...' : file.name}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (err) {
+            console.error('加载失败:', err);
+            container.innerHTML = '<div class="loading">加载失败，请刷新重试</div>';
+        }
+    }
+    
+    // 选择文件上传
+    function selectFile() {
+        document.getElementById('fileInput').click();
+    }
+    
+    async function uploadFiles(input) {
+        const files = input.files;
+        if (!files.length) return;
+        
+        for (let file of files) {
+            const timestamp = Date.now();
+            const fileName = timestamp + '_' + file.name;
+            
+            const { error } = await supabase.storage.from('files').upload(fileName, file);
+            if (error) {
+                alert('上传失败: ' + error.message);
             }
         }
-    </script>
+        
+        alert('上传完成！');
+        await loadFiles();
+        document.getElementById('fileInput').value = '';
+    }
+</script>
 </body>
 </html>
