@@ -2,46 +2,40 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Supabase 连接测试</title>
+    <title>Supabase 测试</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-    <h1>Supabase 配置验证</h1>
-    <p>正在使用以下配置进行测试：</p>
-    <pre id="configDisplay"></pre>
-    <button onclick="runTest()">开始测试连接</button>
-    <div id="result" style="margin-top:20px; white-space:pre-wrap;"></div>
+    <h2>Supabase 连接测试</h2>
+    <p>URL: https://ivmgttyeszqvlqnpqsrw.supabase.co</p>
+    <p>KEY: sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V</p>
+    <button onclick="test()">点击测试</button>
+    <div id="result" style="margin-top:20px; white-space:pre-wrap; background:#f0f0f0; padding:10px;"></div>
 
     <script>
-        // 使用你刚刚提供的、从后台复制的配置
-        const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co/rest/v1/';
-        const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
-        
-        // 在页面上显示当前使用的配置（方便你核对）
-        document.getElementById('configDisplay').innerText = `URL: ${SUPABASE_URL}\nKEY: ${SUPABASE_KEY}`;
-
-        async function runTest() {
+        async function test() {
             const resultDiv = document.getElementById('result');
-            resultDiv.innerText = '正在初始化 Supabase 客户端...';
+            resultDiv.innerText = '连接中...\n';
             
             try {
-                // 1. 尝试初始化客户端
-                const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-                resultDiv.innerText += '\n✅ 客户端初始化成功！\n正在尝试连接 Storage 中的 "files" 桶...';
+                // 创建客户端
+                const supabase = window.supabase.createClient(
+                    'https://ivmgttyeszqvlqnpqsrw.supabase.co',
+                    'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V'
+                );
+                resultDiv.innerText += '✅ 客户端创建成功\n';
                 
-                // 2. 尝试访问你的 storage 桶（这是最关键的一步）
+                // 尝试访问 storage
+                resultDiv.innerText += '正在访问 Storage...\n';
                 const { data, error } = await supabase.storage.from('files').list();
                 
                 if (error) {
-                    resultDiv.innerText += `\n❌ 连接失败！\n错误信息: ${error.message}`;
-                    if (error.message.includes('bucket not found')) {
-                        resultDiv.innerText += `\n\n🔍 提示：找不到名为 'files' 的存储桶。请登录 Supabase 后台，在 Storage 页面创建一个名为 "files" 的公开桶。`;
-                    }
+                    resultDiv.innerText += '❌ 错误: ' + error.message;
                 } else {
-                    resultDiv.innerText += `\n🎉 连接成功！\n你的 "files" 桶里现有 ${data.length} 个文件。`;
+                    resultDiv.innerText += '✅ 成功！找到 ' + data.length + ' 个文件';
                 }
             } catch (err) {
-                resultDiv.innerText += `\n💥 发生致命错误: ${err.message}\n请检查 URL 和 KEY 是否正确复制。`;
+                resultDiv.innerText += '💥 异常: ' + err.message;
             }
         }
     </script>
