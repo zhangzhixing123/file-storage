@@ -2,1028 +2,150 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>共享文件存储助手</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>共享文件存储</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
-            min-height: 100vh;
-        }
-
-        .login-container {
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 20px;
-        }
-
-        .login-card {
-            background: white;
-            border-radius: 24px;
-            padding: 40px 32px;
-            width: 100%;
-            max-width: 400px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-        }
-
-        .login-card h2 {
-            text-align: center;
-            margin-bottom: 10px;
-            color: #333;
-        }
-
-        .login-card .subtitle {
-            text-align: center;
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 14px;
-        }
-
-        .input-group {
-            margin-bottom: 20px;
-        }
-
-        .input-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 500;
-        }
-
-        .input-group input {
-            width: 100%;
-            padding: 12px 16px;
-            border: 1px solid #ddd;
-            border-radius: 12px;
-            font-size: 16px;
-            transition: all 0.2s;
-        }
-
-        .input-group input:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
-        }
-
-        .btn {
-            width: 100%;
-            padding: 14px;
-            border: none;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102,126,234,0.4);
-        }
-
-        .error-msg {
-            color: #ff5252;
-            text-align: center;
-            margin-top: 12px;
-            font-size: 14px;
-        }
-
-        .app-container {
-            display: none;
-            min-height: 100vh;
-        }
-
-        .app-header {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            padding: 16px 20px;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .app-header h1 {
-            font-size: 1.3rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .logout-btn {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-
-        .toolbar {
-            background: white;
-            padding: 16px 20px;
-            border-bottom: 1px solid #eee;
-        }
-
-        .search-bar {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-        }
-
-        .search-input-wrapper {
-            flex: 1;
-            position: relative;
-        }
-
-        .search-input-wrapper i {
-            position: absolute;
-            left: 14px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #999;
-        }
-
-        .search-input {
-            width: 100%;
-            padding: 12px 16px 12px 40px;
-            border: 1px solid #ddd;
-            border-radius: 30px;
-            font-size: 14px;
-            outline: none;
-        }
-
-        .search-input:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
-        }
-
-        .search-clear {
-            background: #f0f0f0;
-            border: none;
-            padding: 0 16px;
-            border-radius: 30px;
-            cursor: pointer;
-        }
-
-        .search-stats {
-            font-size: 12px;
-            color: #666;
-            margin-top: 8px;
-        }
-
-        .action-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-
-        .view-toggle {
-            display: flex;
-            gap: 8px;
-        }
-
-        .view-btn {
-            background: #f0f0f0;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-        }
-
-        .view-btn.active {
-            background: #667eea;
-            color: white;
-        }
-
-        .selection-bar {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .select-all-btn {
-            background: #f0f0f0;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 13px;
-        }
-
-        .download-selected {
-            background: #4caf50;
-            border: none;
-            padding: 8px 20px;
-            border-radius: 20px;
-            cursor: pointer;
-            color: white;
-            font-size: 13px;
-            display: none;
-        }
-
-        .download-selected.show {
-            display: block;
-        }
-
-        .files-grid {
-            padding: 20px;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-            gap: 16px;
-        }
-
-        .file-card {
-            background: white;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
-            cursor: pointer;
-            position: relative;
-        }
-
-        .file-card.selected {
-            box-shadow: 0 0 0 2px #667eea;
-        }
-
-        .file-card:hover {
-            transform: translateY(-4px);
-        }
-
-        .checkbox-overlay {
-            position: absolute;
-            top: 8px;
-            left: 8px;
-            z-index: 10;
-            width: 24px;
-            height: 24px;
-            background: rgba(255,255,255,0.9);
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            color: #667eea;
-        }
-
-        .file-preview {
-            width: 100%;
-            height: 160px;
-            background: #f8f9fa;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-        }
-
-        .file-preview img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .file-icon {
-            font-size: 48px;
-            color: #999;
-        }
-
-        .file-type-badge {
-            position: absolute;
-            bottom: 8px;
-            right: 8px;
-            background: rgba(0,0,0,0.6);
-            color: white;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 10px;
-        }
-
-        .file-info {
-            padding: 12px;
-        }
-
-        .file-name {
-            font-weight: 500;
-            font-size: 13px;
-            margin-bottom: 4px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .file-meta {
-            font-size: 11px;
-            color: #999;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .delete-file {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            background: rgba(0,0,0,0.6);
-            border: none;
-            color: white;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0;
-            transition: opacity 0.2s;
-            z-index: 10;
-        }
-
-        .file-card:hover .delete-file {
-            opacity: 1;
-        }
-
-        .delete-file:hover {
-            background: #ff5252;
-        }
-
-        .files-list {
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .list-item {
-            background: white;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            padding: 10px 16px;
-            position: relative;
-        }
-
-        .list-item.selected {
-            background: #e8eaff;
-        }
-
-        .list-item .checkbox {
-            width: 20px;
-            height: 20px;
-            border: 2px solid #ddd;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
-
-        .list-item.selected .checkbox {
-            background: #667eea;
-            border-color: #667eea;
-            color: white;
-        }
-
-        .list-thumb {
-            width: 48px;
-            height: 48px;
-            border-radius: 8px;
-            object-fit: cover;
-            background: #f0f0f0;
-        }
-
-        .list-info {
-            flex: 1;
-        }
-
-        .list-name {
-            font-weight: 500;
-            font-size: 14px;
-            margin-bottom: 4px;
-        }
-
-        .list-meta {
-            font-size: 11px;
-            color: #999;
-        }
-
-        .list-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .list-download, .list-delete {
-            background: none;
-            border: none;
-            padding: 8px;
-            cursor: pointer;
-            border-radius: 8px;
-        }
-
-        .list-download { color: #667eea; }
-        .list-delete { color: #ff5252; }
-        .list-download:hover, .list-delete:hover { background: #f0f0f0; }
-
-        .fab {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            width: 56px;
-            height: 56px;
-            border-radius: 28px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            border: none;
-            color: white;
-            font-size: 24px;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(102,126,234,0.4);
-            z-index: 90;
-        }
-
-        .upload-modal {
-            display: none;
-            position: fixed;
-            bottom: 100px;
-            right: 30px;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-            overflow: hidden;
-            z-index: 91;
-        }
-
-        .upload-modal.active { display: block; }
-
-        .upload-option {
-            padding: 14px 24px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .upload-option:hover { background: #f5f5f5; }
-
-        .preview-modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.9);
-            z-index: 200;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .preview-modal.active { display: flex; }
-
-        .preview-content { position: relative; max-width: 90%; max-height: 80%; }
-
-        .preview-content img { max-width: 100%; max-height: 80vh; border-radius: 8px; }
-
-        .close-preview {
-            position: absolute;
-            top: 20px;
-            right: 30px;
-            background: none;
-            border: none;
-            color: white;
-            font-size: 32px;
-            cursor: pointer;
-        }
-
-        .download-preview {
-            position: absolute;
-            bottom: 20px;
-            right: 30px;
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 30px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 60px;
-            color: #999;
-        }
-
-        .no-results {
-            text-align: center;
-            padding: 60px;
-            color: #999;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #667eea; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+        .login-card { background: white; border-radius: 24px; padding: 40px; width: 350px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
+        .login-card h2 { margin-bottom: 10px; color: #333; }
+        .login-card p { color: #666; margin-bottom: 30px; font-size: 14px; }
+        .login-card input { width: 100%; padding: 14px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 12px; font-size: 16px; }
+        .login-card button { width: 100%; padding: 14px; background: #667eea; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; }
+        .error { color: #ff5252; margin-top: 12px; font-size: 14px; }
+        .app-container { display: none; min-height: 100vh; background: #f0f2f5; }
+        .header { background: #667eea; color: white; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .logout-btn { background: rgba(255,255,255,0.2); border: none; color: white; padding: 8px 16px; border-radius: 20px; cursor: pointer; }
+        .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; padding: 20px; }
+        .file-card { background: white; border-radius: 12px; overflow: hidden; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .file-card img { width: 100%; height: 150px; object-fit: cover; }
+        .file-card .info { padding: 12px; }
+        .file-card .name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .fab { position: fixed; bottom: 30px; right: 30px; width: 56px; height: 56px; border-radius: 28px; background: #667eea; border: none; color: white; font-size: 24px; cursor: pointer; }
+        .loading { text-align: center; padding: 60px; color: #999; }
     </style>
 </head>
 <body>
 
-<div id="loginContainer" class="login-container">
-    <div class="login-card">
-        <h2>📁 文件存储助手</h2>
-        <div class="subtitle">统一密码 · 共享数据</div>
-        <div class="input-group">
-            <label>密码</label>
-            <input type="password" id="loginPassword" placeholder="请输入密码">
-        </div>
-        <button class="btn btn-primary" onclick="login()">登录</button>
-        <div id="loginError" class="error-msg"></div>
-    </div>
+<!-- 登录页面 -->
+<div id="loginContainer" class="login-card">
+    <h2>📁 共享文件存储</h2>
+    <p>统一密码 123456</p>
+    <input type="password" id="password" placeholder="请输入密码">
+    <button onclick="login()">登录</button>
+    <div id="errorMsg" class="error"></div>
 </div>
 
+<!-- 主界面 -->
 <div id="appContainer" class="app-container">
-    <div class="app-header">
-        <h1><i class="fas fa-cloud-upload-alt"></i> 共享文件存储</h1>
+    <div class="header">
+        <h2>📁 共享文件</h2>
         <button class="logout-btn" onclick="logout()">退出</button>
     </div>
-
-    <div class="toolbar">
-        <div class="search-bar">
-            <div class="search-input-wrapper">
-                <i class="fas fa-search"></i>
-                <input type="text" id="searchInput" class="search-input" placeholder="搜索文件名..." oninput="filterFiles()">
-            </div>
-            <button class="search-clear" onclick="clearSearch()">清除</button>
-        </div>
-        <div id="searchStats" class="search-stats"></div>
-
-        <div class="action-bar">
-            <div class="view-toggle">
-                <button id="gridViewBtn" class="view-btn active" onclick="setView('grid')"><i class="fas fa-th"></i> 网格</button>
-                <button id="listViewBtn" class="view-btn" onclick="setView('list')"><i class="fas fa-list"></i> 列表</button>
-            </div>
-            <div class="selection-bar">
-                <button class="select-all-btn" onclick="toggleSelectAll()">全选</button>
-                <button id="downloadSelectedBtn" class="download-selected" onclick="downloadSelected()"><i class="fas fa-download"></i> 下载选中</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="filesContainer" class="files-grid">
+    <div id="fileList" class="file-grid">
         <div class="loading">加载中...</div>
     </div>
-
-    <button class="fab" onclick="toggleUploadMenu()">
-        <i class="fas fa-plus"></i>
-    </button>
-
-    <div id="uploadMenu" class="upload-modal">
-        <div class="upload-option" onclick="uploadFile('image')">
-            <i class="fas fa-camera"></i> 拍照上传
-        </div>
-        <div class="upload-option" onclick="uploadFile('gallery')">
-            <i class="fas fa-images"></i> 从相册选择图片
-        </div>
-        <div class="upload-option" onclick="uploadFile('file')">
-            <i class="fas fa-file-alt"></i> 上传文件
-        </div>
-    </div>
-
-    <div id="previewModal" class="preview-modal">
-        <button class="close-preview" onclick="closePreview()">×</button>
-        <div class="preview-content">
-            <img id="previewImage" src="">
-        </div>
-        <button id="previewDownloadBtn" class="download-preview" onclick="downloadCurrentPreview()">
-            <i class="fas fa-download"></i> 下载
-        </button>
-    </div>
+    <button class="fab" onclick="selectFile()">+</button>
+    <input type="file" id="fileInput" style="display:none" multiple onchange="uploadFiles(this)">
 </div>
 
 <script>
-    // ==================== 已替换为你的正确密钥 ====================
-    const SUPABASE_URL = "https://ivmgttyeszqvlqnpqsrw.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2bWd0dHllc3pxdmxxbnBxc3J3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY1NzY0NjEsImV4cCI6MjA2MjE1MjQ2MX0.owL4oYiO_0v7tVNArUgaaA_0TUN-o0VfqK8hNQcK57s";
-
-    let supabase;
-    let allFiles = [];
-    let filteredFiles = [];
-    let selectedFileIds = new Set();
-    let currentView = 'grid';
-    let currentPreviewFile = null;
-
+    // ========== 配置区域（请确认这两行正确） ==========
+    const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
+    const SUPABASE_KEY = 'sb_publicIsTable_onL4oY10_bv7tVNAirgaaA_oTUN---';
     const FIXED_PASSWORD = '123456';
+    
+    let supabase;
 
-    function initSupabase() {
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    }
-
+    // 登录
     async function login() {
-        const password = document.getElementById('loginPassword').value;
-        const errorDiv = document.getElementById('loginError');
+        const pwd = document.getElementById('password').value;
+        const errorDiv = document.getElementById('errorMsg');
         
-        if (!password) {
-            errorDiv.innerText = '请输入密码';
-            return;
-        }
-        
-        if (password !== FIXED_PASSWORD) {
+        if (pwd !== FIXED_PASSWORD) {
             errorDiv.innerText = '密码错误！';
             return;
         }
         
         errorDiv.innerText = '';
-        initSupabase();
         
+        // 初始化 Supabase
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
+        // 隐藏登录页，显示主界面
         document.getElementById('loginContainer').style.display = 'none';
         document.getElementById('appContainer').style.display = 'block';
         
+        // 加载文件列表
         await loadFiles();
-        startAutoSync();
     }
-
+    
     function logout() {
         document.getElementById('appContainer').style.display = 'none';
-        document.getElementById('loginContainer').style.display = 'flex';
-        document.getElementById('loginPassword').value = '';
-        selectedFileIds.clear();
-        allFiles = [];
-        filteredFiles = [];
+        document.getElementById('loginContainer').style.display = 'block';
+        document.getElementById('password').value = '';
     }
-
+    
+    // 加载文件列表
     async function loadFiles() {
-        const container = document.getElementById('filesContainer');
+        const container = document.getElementById('fileList');
         container.innerHTML = '<div class="loading">加载中...</div>';
         
         try {
-            const { data, error } = await supabase
-                .from('files')
-                .select('*')
-                .order('created_at', { ascending: false });
+            const { data, error } = await supabase.storage.from('files').list('', {
+                limit: 100,
+                sortBy: { column: 'created_at', order: 'desc' }
+            });
             
             if (error) throw error;
             
-            allFiles = data || [];
-            filterFiles();
-        } catch (error) {
-            console.error('加载失败:', error);
+            if (!data || data.length === 0) {
+                container.innerHTML = '<div class="loading">暂无文件，点击 + 上传</div>';
+                return;
+            }
+            
+            container.innerHTML = data.map(file => {
+                const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
+                const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
+                return `
+                    <div class="file-card" onclick="window.open('${url}', '_blank')">
+                        ${isImage ? `<img src="${url}" onerror="this.src='https://placehold.co/150x150?text=图片'">` : `<div style="height:150px; background:#f0f0f0; display:flex; align-items:center; justify-content:center; font-size:40px;">📄</div>`}
+                        <div class="info">
+                            <div class="name">${file.name.length > 20 ? file.name.slice(0,17)+'...' : file.name}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (err) {
+            console.error('加载失败:', err);
             container.innerHTML = '<div class="loading">加载失败，请刷新重试</div>';
         }
     }
-
-    function filterFiles() {
-        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-        
-        if (!searchTerm) {
-            filteredFiles = [...allFiles];
-        } else {
-            filteredFiles = allFiles.filter(file => 
-                file.file_name.toLowerCase().includes(searchTerm)
-            );
-        }
-        
-        document.getElementById('searchStats').innerHTML = 
-            `找到 ${filteredFiles.length} 个文件${searchTerm ? ` (共 ${allFiles.length} 个)` : ''}`;
-        
-        renderFiles();
+    
+    // 选择文件上传
+    function selectFile() {
+        document.getElementById('fileInput').click();
     }
-
-    function clearSearch() {
-        document.getElementById('searchInput').value = '';
-        filterFiles();
-    }
-
-    function renderFiles() {
-        const container = document.getElementById('filesContainer');
+    
+    async function uploadFiles(input) {
+        const files = input.files;
+        if (!files.length) return;
         
-        if (filteredFiles.length === 0) {
-            container.innerHTML = '<div class="no-results"><i class="fas fa-folder-open" style="font-size: 48px; opacity: 0.5;"></i><p>暂无文件，点击右下角上传</p></div>';
-            return;
-        }
-        
-        if (currentView === 'grid') {
-            container.className = 'files-grid';
-            container.innerHTML = filteredFiles.map(file => `
-                <div class="file-card ${selectedFileIds.has(file.id) ? 'selected' : ''}" data-id="${file.id}">
-                    <div class="checkbox-overlay" onclick="event.stopPropagation(); toggleSelectFile('${file.id}')">
-                        ${selectedFileIds.has(file.id) ? '✓' : '○'}
-                    </div>
-                    <div class="file-preview" onclick="previewFile('${file.id}')">
-                        ${file.file_type && file.file_type.startsWith('image/') 
-                            ? `<img src="${file.file_url}" alt="${file.file_name}" onerror="this.parentElement.innerHTML='<i class=\\'fas fa-file-alt file-icon\\'></i>'">`
-                            : `<i class="fas fa-file-alt file-icon"></i>`
-                        }
-                        <span class="file-type-badge">${file.file_type ? file.file_type.split('/')[0] : 'file'}</span>
-                    </div>
-                    <div class="file-info">
-                        <div class="file-name" title="${file.file_name}">${file.file_name}</div>
-                        <div class="file-meta">
-                            <span>${formatFileSize(file.file_size)}</span>
-                            <span>${formatDate(file.created_at)}</span>
-                        </div>
-                    </div>
-                    <button class="delete-file" onclick="event.stopPropagation(); deleteFile('${file.id}')">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            `).join('');
-        } else {
-            container.className = 'files-list';
-            container.innerHTML = filteredFiles.map(file => `
-                <div class="list-item ${selectedFileIds.has(file.id) ? 'selected' : ''}" data-id="${file.id}">
-                    <div class="checkbox" onclick="toggleSelectFile('${file.id}')">
-                        ${selectedFileIds.has(file.id) ? '✓' : ''}
-                    </div>
-                    ${file.file_type && file.file_type.startsWith('image/') 
-                        ? `<img class="list-thumb" src="${file.file_url}" onerror="this.src=''">`
-                        : `<div class="list-thumb" style="display: flex; align-items: center; justify-content: center;"><i class="fas fa-file-alt" style="font-size: 24px; color: #999;"></i></div>`
-                    }
-                    <div class="list-info" onclick="previewFile('${file.id}')">
-                        <div class="list-name">${file.file_name}</div>
-                        <div class="list-meta">${formatFileSize(file.file_size)} · ${formatDate(file.created_at)}</div>
-                    </div>
-                    <div class="list-actions">
-                        <button class="list-download" onclick="downloadSingleFile('${file.id}')" title="下载">
-                            <i class="fas fa-download"></i>
-                        </button>
-                        <button class="list-delete" onclick="deleteFile('${file.id}')" title="删除">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-        }
-        
-        updateDownloadButton();
-    }
-
-    function setView(view) {
-        currentView = view;
-        document.getElementById('gridViewBtn').classList.toggle('active', view === 'grid');
-        document.getElementById('listViewBtn').classList.toggle('active', view === 'list');
-        renderFiles();
-    }
-
-    function toggleSelectFile(fileId) {
-        if (selectedFileIds.has(fileId)) {
-            selectedFileIds.delete(fileId);
-        } else {
-            selectedFileIds.add(fileId);
-        }
-        renderFiles();
-    }
-
-    function toggleSelectAll() {
-        if (selectedFileIds.size === filteredFiles.length) {
-            selectedFileIds.clear();
-        } else {
-            filteredFiles.forEach(file => selectedFileIds.add(file.id));
-        }
-        renderFiles();
-    }
-
-    function updateDownloadButton() {
-        const btn = document.getElementById('downloadSelectedBtn');
-        if (selectedFileIds.size > 0) {
-            btn.classList.add('show');
-            btn.innerHTML = `<i class="fas fa-download"></i> 下载选中 (${selectedFileIds.size})`;
-        } else {
-            btn.classList.remove('show');
-        }
-    }
-
-    async function downloadSingleFile(fileId) {
-        const file = allFiles.find(f => f.id === fileId);
-        if (!file) return;
-        
-        try {
-            const response = await fetch(file.file_url);
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = file.file_name;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        } catch (error) {
-            alert('下载失败：' + error.message);
-        }
-    }
-
-    async function downloadSelected() {
-        const filesToDownload = allFiles.filter(f => selectedFileIds.has(f.id));
-        
-        if (filesToDownload.length === 0) return;
-        
-        if (filesToDownload.length === 1) {
-            await downloadSingleFile(filesToDownload[0].id);
-        } else {
-            alert(`将依次下载 ${filesToDownload.length} 个文件`);
-            for (const file of filesToDownload) {
-                await downloadSingleFile(file.id);
-                await new Promise(resolve => setTimeout(resolve, 500));
+        for (let file of files) {
+            const timestamp = Date.now();
+            const fileName = timestamp + '_' + file.name;
+            
+            const { error } = await supabase.storage.from('files').upload(fileName, file);
+            if (error) {
+                alert('上传失败: ' + error.message);
             }
         }
-    }
-
-    function previewFile(fileId) {
-        const file = allFiles.find(f => f.id === fileId);
-        if (!file) return;
         
-        currentPreviewFile = file;
-        
-        if (file.file_type && file.file_type.startsWith('image/')) {
-            const modal = document.getElementById('previewModal');
-            const img = document.getElementById('previewImage');
-            img.src = file.file_url;
-            modal.classList.add('active');
-        } else {
-            downloadSingleFile(fileId);
-        }
+        alert('上传完成！');
+        await loadFiles();
+        document.getElementById('fileInput').value = '';
     }
-
-    function closePreview() {
-        document.getElementById('previewModal').classList.remove('active');
-        currentPreviewFile = null;
-    }
-
-    async function downloadCurrentPreview() {
-        if (currentPreviewFile) {
-            await downloadSingleFile(currentPreviewFile.id);
-        }
-    }
-
-    function toggleUploadMenu() {
-        const menu = document.getElementById('uploadMenu');
-        menu.classList.toggle('active');
-        
-        if (menu.classList.contains('active')) {
-            setTimeout(() => {
-                document.addEventListener('click', function closeMenu(e) {
-                    if (!menu.contains(e.target) && !e.target.classList.contains('fab')) {
-                        menu.classList.remove('active');
-                        document.removeEventListener('click', closeMenu);
-                    }
-                });
-            }, 0);
-        }
-    }
-
-    async function uploadFile(type) {
-        document.getElementById('uploadMenu').classList.remove('active');
-        
-        if (type === 'image') {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.capture = 'environment';
-            input.onchange = async (e) => {
-                if (e.target.files.length) {
-                    await uploadToCloud(e.target.files[0]);
-                }
-            };
-            input.click();
-        } else if (type === 'gallery') {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.multiple = true;
-            input.onchange = async (e) => {
-                if (e.target.files.length) {
-                    for (let f of e.target.files) {
-                        await uploadToCloud(f);
-                    }
-                }
-            };
-            input.click();
-        } else {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.multiple = true;
-            input.onchange = async (e) => {
-                if (e.target.files.length) {
-                    for (let f of e.target.files) {
-                        await uploadToCloud(f);
-                    }
-                }
-            };
-            input.click();
-        }
-    }
-
-    async function uploadToCloud(file) {
-        try {
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-            const filePath = `shared/${fileName}`;
-            
-            const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('files')
-                .upload(filePath, file);
-            
-            if (uploadError) throw uploadError;
-            
-            const { data: urlData } = supabase.storage
-                .from('files')
-                .getPublicUrl(filePath);
-            
-            const { error: dbError } = await supabase
-                .from('files')
-                .insert({
-                    file_name: file.name,
-                    file_url: urlData.publicUrl,
-                    file_type: file.type || 'application/octet-stream',
-                    file_size: file.size,
-                    storage_path: filePath
-                });
-            
-            if (dbError) throw dbError;
-            
-            await loadFiles();
-            alert("上传成功！");
-        } catch (error) {
-            console.error('上传失败:', error);
-            alert('上传失败：' + error.message);
-        }
-    }
-
-    async function deleteFile(fileId) {
-        if (!confirm('确定删除这个文件吗？')) return;
-        
-        const file = allFiles.find(f => f.id === fileId);
-        if (!file) return;
-        
-        try {
-            await supabase.storage.from('files').remove([file.storage_path]);
-            await supabase.from('files').delete().eq('id', fileId);
-            selectedFileIds.delete(fileId);
-            await loadFiles();
-        } catch (error) {
-            alert('删除失败：' + error.message);
-        }
-    }
-
-    function formatFileSize(bytes) {
-        if (!bytes || bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-    }
-
-    function formatDate(dateStr) {
-        const date = new Date(dateStr);
-        const now = new Date();
-        const diff = now - date;
-        
-        if (diff < 60000) return '刚刚';
-        if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
-        if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
-        
-        return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0")}:${date.getMinutes().toString().padStart(2, '0')}`;
-    }
-
-    let syncInterval;
-    function startAutoSync() {
-        if (syncInterval) clearInterval(syncInterval);
-        syncInterval = setInterval(() => {
-            loadFiles();
-        }, 30000);
-    }
-
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            closePreview();
-        }
-    });
-
-    document.getElementById('previewModal').addEventListener('click', (e) => {
-        if (e.target === document.getElementById('previewModal')) {
-            closePreview();
-        }
-    });
 </script>
 </body>
 </html>
