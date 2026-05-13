@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>共享文件存储助手</title>
-    <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- 图标库 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * {
@@ -21,7 +19,6 @@
             min-height: 100vh;
         }
 
-        /* 登录页面 */
         .login-container {
             min-height: 100vh;
             display: flex;
@@ -107,7 +104,6 @@
             font-size: 14px;
         }
 
-        /* 主应用页面 */
         .app-container {
             display: none;
             min-height: 100vh;
@@ -144,7 +140,6 @@
             font-size: 14px;
         }
 
-        /* 工具栏 */
         .toolbar {
             background: white;
             padding: 16px 20px;
@@ -255,7 +250,6 @@
             display: block;
         }
 
-        /* 文件网格 */
         .files-grid {
             padding: 20px;
             display: grid;
@@ -376,7 +370,6 @@
             background: #ff5252;
         }
 
-        /* 列表视图 */
         .files-list {
             padding: 20px;
             display: flex;
@@ -455,7 +448,6 @@
         .list-delete { color: #ff5252; }
         .list-download:hover, .list-delete:hover { background: #f0f0f0; }
 
-        /* 悬浮按钮 */
         .fab {
             position: fixed;
             bottom: 30px;
@@ -556,7 +548,6 @@
 </head>
 <body>
 
-<!-- 登录页面 -->
 <div id="loginContainer" class="login-container">
     <div class="login-card">
         <h2>📁 文件存储助手</h2>
@@ -570,7 +561,6 @@
     </div>
 </div>
 
-<!-- 主应用页面 -->
 <div id="appContainer" class="app-container">
     <div class="app-header">
         <h1><i class="fas fa-cloud-upload-alt"></i> 共享文件存储</h1>
@@ -631,9 +621,9 @@
 </div>
 
 <script>
-    // ==================== Supabase 配置 ====================
-    const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
-    const SUPABASE_ANON_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
+    // ==================== 已替换为你的正确密钥 ====================
+    const SUPABASE_URL = "https://ivmgttyeszqvlqnpqsrw.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2bWd0dHllc3pxdmxxbnBxc3J3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDY1NzY0NjEsImV4cCI6MjA2MjE1MjQ2MX0.owL4oYiO_0v7tVNArUgaaA_0TUN-o0VfqK8hNQcK57s";
 
     let supabase;
     let allFiles = [];
@@ -642,15 +632,12 @@
     let currentView = 'grid';
     let currentPreviewFile = null;
 
-    // 固定密码
     const FIXED_PASSWORD = '123456';
 
-    // 初始化 Supabase
     function initSupabase() {
         supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     }
 
-    // ==================== 登录功能 ====================
     async function login() {
         const password = document.getElementById('loginPassword').value;
         const errorDiv = document.getElementById('loginError');
@@ -684,13 +671,11 @@
         filteredFiles = [];
     }
 
-    // ==================== 文件管理功能 ====================
     async function loadFiles() {
         const container = document.getElementById('filesContainer');
         container.innerHTML = '<div class="loading">加载中...</div>';
         
         try {
-            // 查询所有文件（不限制 user_id，所有用户共享）
             const { data, error } = await supabase
                 .from('files')
                 .select('*')
@@ -799,7 +784,6 @@
         renderFiles();
     }
 
-    // ==================== 选中功能 ====================
     function toggleSelectFile(fileId) {
         if (selectedFileIds.has(fileId)) {
             selectedFileIds.delete(fileId);
@@ -828,7 +812,6 @@
         }
     }
 
-    // ==================== 下载功能 ====================
     async function downloadSingleFile(fileId) {
         const file = allFiles.find(f => f.id === fileId);
         if (!file) return;
@@ -865,7 +848,6 @@
         }
     }
 
-    // ==================== 预览功能 ====================
     function previewFile(fileId) {
         const file = allFiles.find(f => f.id === fileId);
         if (!file) return;
@@ -893,7 +875,6 @@
         }
     }
 
-    // ==================== 上传功能 ====================
     function toggleUploadMenu() {
         const menu = document.getElementById('uploadMenu');
         menu.classList.toggle('active');
@@ -981,6 +962,7 @@
             if (dbError) throw dbError;
             
             await loadFiles();
+            alert("上传成功！");
         } catch (error) {
             console.error('上传失败:', error);
             alert('上传失败：' + error.message);
@@ -1003,7 +985,6 @@
         }
     }
 
-    // ==================== 辅助功能 ====================
     function formatFileSize(bytes) {
         if (!bytes || bytes === 0) return '0 B';
         const k = 1024;
