@@ -1002,7 +1002,7 @@
         if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
         if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`;
         
-        return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+        return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0")}:${date.getMinutes().toString().padStart(2, '0')}`;
     }
 
     let syncInterval;
