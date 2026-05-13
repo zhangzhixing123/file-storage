@@ -48,7 +48,7 @@
 </div>
 
 <script>
-    // ========== 你的配置（已确认正确） ==========
+    // ========== 你的配置（和测试页面完全一致） ==========
     const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
     const PASSWORD = '123456';
@@ -64,11 +64,14 @@
         }
         document.getElementById('errorMsg').innerText = '';
         
+        // 这里和测试页面完全一样
         supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         
+        // 切换界面
         document.getElementById('loginCard').style.display = 'none';
         document.getElementById('app').style.display = 'block';
         
+        // 加载文件
         await loadFiles();
     };
     
@@ -85,6 +88,7 @@
         container.innerHTML = '<div class="loading">加载中...</div>';
         
         try {
+            // 这个请求和测试页面里的完全一样
             const { data, error } = await supabase.storage.from('files').list();
             
             if (error) {
