@@ -2,141 +2,77 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>共享文件存储</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: system-ui, -apple-system, sans-serif; background: #667eea; min-height: 100vh; }
-        .login-card { background: white; border-radius: 24px; padding: 40px; width: 350px; text-align: center; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
-        .login-card input { width: 100%; padding: 14px; margin: 20px 0; border: 1px solid #ddd; border-radius: 12px; font-size: 16px; }
-        .login-card button { width: 100%; padding: 14px; background: #667eea; color: white; border: none; border-radius: 12px; font-size: 16px; cursor: pointer; }
-        .error { color: #ff5252; margin-top: 10px; font-size: 14px; }
-        .app { display: none; min-height: 100vh; background: #f0f2f5; }
-        .header { background: #667eea; color: white; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }
-        .header button { background: rgba(255,255,255,0.2); border: none; color: white; padding: 8px 16px; border-radius: 20px; cursor: pointer; }
-        .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; padding: 20px; }
-        .file-card { background: white; border-radius: 12px; padding: 16px; cursor: pointer; text-align: center; transition: transform 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .file-card:hover { transform: translateY(-4px); }
-        .file-card .preview { width: 100%; height: 120px; background: #f5f5f5; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 48px; margin-bottom: 12px; }
-        .file-card img { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; }
-        .file-card .name { font-size: 13px; font-weight: 500; word-break: break-all; }
-        .fab { position: fixed; bottom: 30px; right: 30px; width: 56px; height: 56px; border-radius: 28px; background: #667eea; color: white; border: none; font-size: 24px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 100; }
-        .loading { text-align: center; padding: 60px; color: #999; }
-    </style>
 </head>
 <body>
-
-<div id="loginCard" class="login-card">
-    <h2>📁 共享文件存储</h2>
-    <p>统一密码：123456</p>
-    <input type="password" id="password" placeholder="请输入密码">
-    <button id="loginBtn">登录</button>
-    <div id="errorMsg" class="error"></div>
-</div>
-
-<div id="app" class="app">
-    <div class="header">
-        <h2>📁 共享文件</h2>
-        <button id="logoutBtn">退出</button>
+    <div style="text-align:center; margin-top:50px;">
+        <h2>📁 共享文件存储</h2>
+        <p>密码 123456</p>
+        <input type="password" id="pwd" placeholder="请输入密码">
+        <button onclick="login()">登录</button>
+        <div id="msg" style="color:red"></div>
     </div>
-    <div id="fileList" class="file-grid">
-        <div class="loading">加载中...</div>
+    <div id="app" style="display:none; text-align:center;">
+        <h3>上传文件</h3>
+        <input type="file" id="fileInput" multiple>
+        <div id="fileList"></div>
+        <button onclick="logout()">退出</button>
     </div>
-    <button id="addBtn" class="fab">+</button>
-    <input type="file" id="fileInput" style="display:none" multiple>
-</div>
 
-<script>
-    // ========== 你的配置（和测试页面完全一致） ==========
-    const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
-    const PASSWORD = '123456';
-    
-    let supabase;
-    
-    // 登录
-    document.getElementById('loginBtn').onclick = async () => {
-        const pwd = document.getElementById('password').value;
-        if (pwd !== PASSWORD) {
-            document.getElementById('errorMsg').innerText = '密码错误';
-            return;
+    <script>
+        const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
+        const PASSWORD = '123456';
+        let supabase;
+
+        async function login() {
+            const pwd = document.getElementById('pwd').value;
+            if (pwd !== PASSWORD) {
+                document.getElementById('msg').innerText = '密码错误';
+                return;
+            }
+            document.getElementById('msg').innerText = '';
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            document.querySelector('body > div').style.display = 'none';
+            document.getElementById('app').style.display = 'block';
+            await loadFiles();
         }
-        document.getElementById('errorMsg').innerText = '';
-        
-        // 这里和测试页面完全一样
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        
-        // 切换界面
-        document.getElementById('loginCard').style.display = 'none';
-        document.getElementById('app').style.display = 'block';
-        
-        // 加载文件
-        await loadFiles();
-    };
-    
-    // 退出
-    document.getElementById('logoutBtn').onclick = () => {
-        document.getElementById('app').style.display = 'none';
-        document.getElementById('loginCard').style.display = 'block';
-        document.getElementById('password').value = '';
-    };
-    
-    // 加载文件列表
-    async function loadFiles() {
-        const container = document.getElementById('fileList');
-        container.innerHTML = '<div class="loading">加载中...</div>';
-        
-        try {
-            // 这个请求和测试页面里的完全一样
+
+        function logout() {
+            document.getElementById('app').style.display = 'none';
+            document.querySelector('body > div').style.display = 'block';
+            document.getElementById('pwd').value = '';
+        }
+
+        async function loadFiles() {
+            const fileListDiv = document.getElementById('fileList');
+            fileListDiv.innerHTML = '加载中...';
             const { data, error } = await supabase.storage.from('files').list();
-            
             if (error) {
-                container.innerHTML = `<div class="loading">加载失败: ${error.message}</div>`;
+                fileListDiv.innerHTML = '错误: ' + error.message;
                 return;
             }
-            
             if (!data || data.length === 0) {
-                container.innerHTML = '<div class="loading">暂无文件，点击 + 上传</div>';
+                fileListDiv.innerHTML = '暂无文件';
                 return;
             }
-            
-            container.innerHTML = data.map(file => {
-                const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
-                const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
-                return `
-                    <div class="file-card" onclick="window.open('${url}', '_blank')">
-                        <div class="preview">
-                            ${isImage ? `<img src="${url}" onerror="this.parentElement.innerHTML='📄'">` : '📄'}
-                        </div>
-                        <div class="name" title="${file.name}">${file.name.length > 25 ? file.name.slice(0,22)+'...' : file.name}</div>
-                    </div>
-                `;
-            }).join('');
-        } catch (err) {
-            container.innerHTML = `<div class="loading">错误: ${err.message}</div>`;
+            fileListDiv.innerHTML = data.map(f => `<div>📄 ${f.name} <button onclick="downloadFile('${f.name}')">下载</button></div>`).join('');
         }
-    }
-    
-    // 上传文件
-    document.getElementById('addBtn').onclick = () => {
-        document.getElementById('fileInput').click();
-    };
-    
-    document.getElementById('fileInput').onchange = async (e) => {
-        const files = e.target.files;
-        if (!files.length) return;
-        
-        for (let file of files) {
-            const fileName = Date.now() + '_' + file.name;
-            const { error } = await supabase.storage.from('files').upload(fileName, file);
-            if (error) {
-                alert('上传失败: ' + error.message);
+
+        window.downloadFile = async (fileName) => {
+            const { data } = supabase.storage.from('files').getPublicUrl(fileName);
+            window.open(data.publicUrl, '_blank');
+        };
+
+        document.getElementById('fileInput').onchange = async (e) => {
+            const files = e.target.files;
+            for (let file of files) {
+                const fileName = Date.now() + '_' + file.name;
+                await supabase.storage.from('files').upload(fileName, file);
             }
-        }
-        await loadFiles();
-        document.getElementById('fileInput').value = '';
-    };
-</script>
+            await loadFiles();
+        };
+    </script>
 </body>
 </html>
