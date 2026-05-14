@@ -37,16 +37,12 @@
             <h3>自定义项目分类</h3>
             <div id="categoryList">
                 <div class="category-item active">全部文件</div>
-                <div class="category-item">日常图片</div>
-                <div class="category-item">办公文档</div>
-                <div class="category-item">视频素材</div>
-                <div class="category-item">直邮图片</div>
             </div>
             <button class="add-category-btn" onclick="addCategory()">+ 新建分类命名</button>
         </div>
         <div class="content-area">
             <div class="tool-bar">
-                <button onclick="triggerFileUpload()">🖼️ 上传单张/多张图片</button>
+                <button onclick="triggerFileUpload()">🖼️ 上传单张/多张图片文件</button>
                 <button onclick="triggerFolderUpload()">📂 上传整个文件夹</button>
                 <button class="warn" onclick="checkAll()">☑ 一键全选</button>
                 <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
@@ -66,7 +62,7 @@
         </div>
     </div>
 
-    <!-- 隐藏的文件选择器，用JS触发 -->
+    <!-- 隐藏的文件选择器 -->
     <input type="file" id="fileInput" multiple style="display:none">
     <input type="file" id="folderInput" multiple webkitdirectory directory style="display:none">
 
@@ -82,25 +78,27 @@
 
     // 渲染分类
     function renderCate(){
+        let cate = JSON.parse(localStorage.cate||'["全部文件"]');
         let html = "";
-        ["全部文件","日常图片","办公文档","视频素材","直邮图片"].forEach((item,idx)=>{
-            html += `<div class="category-item ${idx===0?'active':''}" onclick="selCate(this)">${item}</div>`;
-        })
+        cate.forEach((v,i)=>{
+            html += `<div class="category-item ${i===0?'active':''}" onclick="selCate(this)">${v}</div>`;
+        });
         document.getElementById("categoryList").innerHTML = html;
     }
     window.addCategory = function(){
         let name = prompt("输入新分类名称：");
-        if(name){
-            let newHtml = document.getElementById("categoryList").innerHTML + `<div class="category-item">${name}</div>`;
-            document.getElementById("categoryList").innerHTML = newHtml;
-        }
+        if(!name) return;
+        let arr = JSON.parse(localStorage.cate||'["全部文件"]');
+        arr.push(name);
+        localStorage.cate = JSON.stringify(arr);
+        renderCate();
     }
     window.selCate = function(el){
-        document.querySelectorAll(".category-item").forEach(e=>e.classList.remove("active"));
+        document.querySelectorAll(".category-item").forEach(x=>x.classList.remove("active"));
         el.classList.add("active");
     }
 
-    // 一键全选/取消全选
+    // 全选/取消全选
     window.checkAll = () => document.querySelectorAll(".file-chk").forEach(x=>x.checked=true);
     window.unCheckAll = () => document.querySelectorAll(".file-chk").forEach(x=>x.checked=false);
 
@@ -180,13 +178,13 @@
     async function handleUpload(files){
         if(!files.length) return;
         for(let file of files){
-            // 关键：用 webkitRelativePath 保留文件的完整路径，不会变成空文件夹
+            // 关键：只上传文件，不生成无效目录
             let path = file.webkitRelativePath || file.name;
-            // 只过滤非法字符，不修改文件名和层级
+            // 过滤非法字符，保留完整文件名和路径
             let safePath = path.replace(/[^\u4e00-\u9fa5a-zA-Z0-9_\-./]/g, "_");
             await sb.storage.from("files").upload(safePath, file);
         }
-        alert("上传成功！文件已保留原目录结构");
+        alert("上传成功！");
         loadFiles();
     }
 
