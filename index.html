@@ -4,75 +4,96 @@
     <meta charset="UTF-8">
     <title>共享文件存储</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: system-ui; text-align: center; margin-top: 50px; }
+        input, button { padding: 8px 16px; margin: 8px; }
+        #app { display: none; }
+        .file-item { border: 1px solid #ccc; margin: 8px auto; padding: 8px; width: 300px; }
+    </style>
 </head>
 <body>
-    <div style="text-align:center; margin-top:50px;">
-        <h2>📁 共享文件存储</h2>
-        <p>密码 123456</p>
-        <input type="password" id="pwd" placeholder="请输入密码">
+
+    <!-- 登录界面 -->
+    <div id="loginBox">
+        <h2>共享文件存储</h2>
+        <input type="password" id="password" placeholder="密码 123456">
         <button onclick="login()">登录</button>
-        <div id="msg" style="color:red"></div>
+        <p id="errorMsg" style="color:red"></p>
     </div>
-    <div id="app" style="display:none; text-align:center;">
-        <h3>上传文件</h3>
+
+    <!-- 主界面 -->
+    <div id="app">
+        <h2>文件管理</h2>
         <input type="file" id="fileInput" multiple>
-        <div id="fileList"></div>
+        <button onclick="uploadFiles()">上传</button>
         <button onclick="logout()">退出</button>
+        <div id="fileList"></div>
     </div>
 
     <script>
+        // 您的正确配置
         const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
         const PASSWORD = '123456';
         let supabase;
 
         async function login() {
-            const pwd = document.getElementById('pwd').value;
+            const pwd = document.getElementById('password').value;
             if (pwd !== PASSWORD) {
-                document.getElementById('msg').innerText = '密码错误';
+                document.getElementById('errorMsg').innerText = '密码错误';
                 return;
             }
-            document.getElementById('msg').innerText = '';
+            document.getElementById('errorMsg').innerText = '';
+            
             supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-            document.querySelector('body > div').style.display = 'none';
+            
+            document.getElementById('loginBox').style.display = 'none';
             document.getElementById('app').style.display = 'block';
+            
             await loadFiles();
         }
 
         function logout() {
             document.getElementById('app').style.display = 'none';
-            document.querySelector('body > div').style.display = 'block';
-            document.getElementById('pwd').value = '';
+            document.getElementById('loginBox').style.display = 'block';
+            document.getElementById('password').value = '';
         }
 
         async function loadFiles() {
-            const fileListDiv = document.getElementById('fileList');
-            fileListDiv.innerHTML = '加载中...';
+            const container = document.getElementById('fileList');
+            container.innerHTML = '加载中...';
+            
             const { data, error } = await supabase.storage.from('files').list();
             if (error) {
-                fileListDiv.innerHTML = '错误: ' + error.message;
+                container.innerHTML = '加载失败: ' + error.message;
                 return;
             }
+            
             if (!data || data.length === 0) {
-                fileListDiv.innerHTML = '暂无文件';
+                container.innerHTML = '暂无文件';
                 return;
             }
-            fileListDiv.innerHTML = data.map(f => `<div>📄 ${f.name} <button onclick="downloadFile('${f.name}')">下载</button></div>`).join('');
+            
+            container.innerHTML = data.map(file => {
+                const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
+                return `<div class="file-item">
+                            📄 ${file.name}
+                            <button onclick="window.open('${url}', '_blank')">下载</button>
+                        </div>`;
+            }).join('');
         }
 
-        window.downloadFile = async (fileName) => {
-            const { data } = supabase.storage.from('files').getPublicUrl(fileName);
-            window.open(data.publicUrl, '_blank');
-        };
-
-        document.getElementById('fileInput').onchange = async (e) => {
-            const files = e.target.files;
+        async function uploadFiles() {
+            const files = document.getElementById('fileInput').files;
+            if (!files.length) return;
+            
             for (let file of files) {
                 const fileName = Date.now() + '_' + file.name;
                 await supabase.storage.from('files').upload(fileName, file);
             }
             await loadFiles();
-        };
+            document.getElementById('fileInput').value = '';
+        }
     </script>
 </body>
 </html>
