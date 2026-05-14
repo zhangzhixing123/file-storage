@@ -80,8 +80,6 @@
             border-radius: 6px;
             min-width: 220px;
         }
-        input.file-input {display: none;}
-        .btn-group {display: flex;gap:8px;}
         /* 列表样式 */
         .file-item {
             background: #fff;
@@ -130,18 +128,17 @@
             <h3>自定义项目分类</h3>
             <div id="categoryList">
                 <div class="category-item active">全部文件</div>
+                <div class="category-item">日常图片</div>
+                <div class="category-item">办公文档</div>
+                <div class="category-item">视频素材</div>
+                <div class="category-item">直邮图片</div>
             </div>
             <button class="add-category-btn" onclick="addCategory()">+ 新建分类命名</button>
         </div>
         <div class="content-area">
             <div class="tool-bar">
-                <!-- 双按钮：分开 普通文件/文件夹 -->
-                <input type="file" id="fileInput" class="file-input" multiple>
-                <label for="fileInput"><button>📤 上传文件/图片</button></label>
-
-                <input type="file" id="folderInput" class="file-input" multiple webkitdirectory directory>
-                <label for="folderInput"><button>📁 上传整个文件夹</button></label>
-
+                <button onclick="triggerFileUpload()">📤 上传文件/图片</button>
+                <button onclick="triggerFolderUpload()">📁 上传整个文件夹</button>
                 <button class="warn" onclick="checkAll()">☑ 一键全选</button>
                 <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
                 <button id="batchDownload">📥 批量下载</button>
@@ -160,6 +157,10 @@
         </div>
     </div>
 
+    <!-- 隐藏的文件选择器，用JS触发 -->
+    <input type="file" id="fileInput" multiple style="display:none">
+    <input type="file" id="folderInput" multiple webkitdirectory directory style="display:none">
+
 <script>
 (function() {
     const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
@@ -169,22 +170,20 @@
     let allFiles = [];
     let currentView = 'list';
     let searchKeyword = '';
-    let categories = JSON.parse(localStorage.getItem('fileCate')) || ["全部文件","日常图片","办公文档","视频素材"];
 
     // 渲染分类
     function renderCate(){
         let html = "";
-        categories.forEach((item,idx)=>{
+        ["全部文件","日常图片","办公文档","视频素材","直邮图片"].forEach((item,idx)=>{
             html += `<div class="category-item ${idx===0?'active':''}" onclick="selCate(this)">${item}</div>`;
         })
         document.getElementById("categoryList").innerHTML = html;
     }
     window.addCategory = function(){
         let name = prompt("输入新分类名称：");
-        if(name && !categories.includes(name)){
-            categories.push(name);
-            localStorage.setItem('fileCate',JSON.stringify(categories));
-            renderCate();
+        if(name){
+            let newHtml = document.getElementById("categoryList").innerHTML + `<div class="category-item">${name}</div>`;
+            document.getElementById("categoryList").innerHTML = newHtml;
         }
     }
     window.selCate = function(el){
@@ -274,13 +273,19 @@
         renderFiles();
     }
 
+    // 用JS直接触发文件选择
+    window.triggerFileUpload = function(){
+        document.getElementById("fileInput").click();
+    }
+    window.triggerFolderUpload = function(){
+        document.getElementById("folderInput").click();
+    }
+
     // 上传通用逻辑（保留完整路径）
     async function handleUpload(files){
         if(!files.length) return;
         for(let file of files){
-            // 文件夹：webkitRelativePath；单文件：name
             let path = file.webkitRelativePath || file.name;
-            // 仅过滤非法字符，不破坏路径
             let safePath = path.replace(/[^\u4e00-\u9fa5a-zA-Z0-9_\-./]/g,"_");
             await supabase.storage.from("files").upload(safePath,file);
         }
@@ -288,12 +293,11 @@
         loadFiles();
     }
 
-    // 普通文件/图片上传
+    // 绑定文件选择事件
     document.getElementById("fileInput").onchange = function(e){
         handleUpload(e.target.files);
         this.value = "";
     };
-    // 文件夹上传
     document.getElementById("folderInput").onchange = function(e){
         handleUpload(e.target.files);
         this.value = "";
