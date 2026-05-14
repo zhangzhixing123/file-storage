@@ -1,109 +1,352 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
+    <meta charset="UTF-8">
+    <title>共享文件存储</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-</head>
-<body>
-    <h2>共享文件存储</h2>
-    <input type="file" id="fileInput" multiple>
-    <br><br>
-    <button id="uploadBtn">上传文件</button>
-    <hr>
-    <div id="fileList">正在加载文件列表...</div>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
 
-    <script>
-        (function() {
-            // 配置
-            const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
-            const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
-            
-            console.log('1. 开始初始化');
-            
-            // 创建 Supabase 客户端
-            const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-            console.log('2. Supabase 客户端创建完成');
-            
-            // 加载文件列表
-            async function loadFiles() {
-                console.log('3. loadFiles 开始执行');
-                const container = document.getElementById('fileList');
-                container.innerHTML = '正在加载...';
-                
-                try {
-                    const { data, error } = await supabase.storage.from('files').list();
-                    console.log('4. Supabase 返回结果', { data, error });
-                    
-                    if (error) {
-                        container.innerHTML = '加载失败: ' + error.message;
-                        return;
-                    }
-                    
-                    if (!data || data.length === 0) {
-                        container.innerHTML = '暂无文件，请上传';
-                        return;
-                    }
-                    
-                    let html = '';
-                    for (let file of data) {
-                        const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
-                        html += `<div>📄 ${file.name} - <a href="${url}" target="_blank">查看/下载</a></div>`;
-                    }
-                    container.innerHTML = html;
-                    console.log('5. 文件列表渲染完成，共', data.length, '个文件');
-                } catch (err) {
-                    console.error('6. loadFiles 出错:', err);
-                    container.innerHTML = '加载出错: ' + err.message;
-                }
-            }
-            
-            // 上传文件（已修复：文件名安全处理）
-            async function uploadFiles(files) {
-                console.log('7. uploadFiles 开始，文件数量:', files.length);
-                
-                for (let i = 0; i < files.length; i++) {
-                    const file = files[i];
-                    
-                    // ✅ 修复：自动把中文/特殊字符变成合法文件名
-                    const safeName = file.name.replace(/[^a-zA-Z0-9_\-.]/g, '_');
-                    const fileName = Date.now() + '_' + safeName;
-                    
-                    console.log(`8. 正在上传第 ${i+1} 个文件:`, fileName);
-                    
-                    const { error } = await supabase.storage.from('files').upload(fileName, file);
-                    if (error) {
-                        alert(`上传失败: ${file.name} - ${error.message}`);
-                        return false;
-                    }
-                    console.log(`9. 上传成功:`, fileName);
-                }
-                return true;
-            }
-            
-            // 绑定上传按钮事件
-            const uploadBtn = document.getElementById('uploadBtn');
-            uploadBtn.onclick = async function() {
-                console.log('10. 上传按钮被点击');
-                const fileInput = document.getElementById('fileInput');
-                const files = fileInput.files;
-                
-                if (!files.length) {
-                    alert('请先选择文件');
-                    return;
-                }
-                
-                const success = await uploadFiles(files);
-                if (success) {
-                    alert('上传完成！');
-                    fileInput.value = '';
-                    await loadFiles();
-                }
-            };
-            
-            // 页面加载完成后自动加载文件列表
-            console.log('11. 准备加载文件列表');
+        body {
+            background: #f5f7fa;
+            padding: 20px;
+        }
+
+        /* 登录界面 */
+        .login {
+            max-width: 400px;
+            margin: 100px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            display: none;
+        }
+
+        .login.active {
+            display: block;
+        }
+
+        .login h2 {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .login input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+
+        .login button {
+            width: 100%;
+            padding: 12px;
+            background: #409eff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        /* 主界面 */
+        .app {
+            display: none;
+        }
+
+        .app.active {
+            display: block;
+        }
+
+        .tool-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            background: #409eff;
+            color: white;
+            cursor: pointer;
+        }
+
+        button.danger {
+            background: #f56c6c;
+        }
+
+        input.search {
+            flex: 1;
+            min-width: 200px;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+
+        .category {
+            margin: 15px 0;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .category button {
+            background: #e4e7ed;
+            color: #333;
+        }
+
+        .category button.active {
+            background: #409eff;
+            color: white;
+        }
+
+        /* 文件列表 */
+        .file-list {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .file-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-item:hover {
+            background: #fafafa;
+        }
+
+        .file-name {
+            flex: 1;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .file-actions button {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        /* 多选框 */
+        .checkbox {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+<!-- 登录界面 -->
+<div class="login active" id="loginBox">
+    <h2>🔒 登录</h2>
+    <input type="password" id="pwd" placeholder="请输入密码" autocomplete="off">
+    <button onclick="login()">登录</button>
+</div>
+
+<!-- 主界面 -->
+<div class="app" id="appBox">
+    <div class="tool-bar">
+        <input type="file" id="fileInput" multiple webkitdirectory directory>
+        <button onclick="uploadFiles()">上传文件</button>
+        <button onclick="batchDownload()">批量下载</button>
+        <button class="danger" onclick="deleteSelected()">删除选中</button>
+        <input class="search" id="search" placeholder="搜索文件..." oninput="searchFile()">
+    </div>
+
+    <div class="category">
+        <button class="active" data-type="all">全部</button>
+        <button data-type="image">图片</button>
+        <button data-type="video">视频</button>
+        <button data-type="audio">音频</button>
+        <button data-type="doc">文档</button>
+        <button data-type="other">其他</button>
+    </div>
+
+    <div class="file-list" id="fileList">
+        加载中...
+    </div>
+</div>
+
+<script>
+    // ========== 配置 ==========
+    const SUPABASE_URL = "https://ivmgttyeszqvlqnpqsrw.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V";
+    const LOGIN_PASSWORD = "123456";
+
+    let supabase;
+    let allFiles = [];
+    let selectedFiles = [];
+
+    // 初始化
+    (function () {
+        supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        document.getElementById("loginBox").classList.add("active");
+    })();
+
+    // 登录
+    function login() {
+        const p = document.getElementById("pwd").value;
+        if (p === LOGIN_PASSWORD) {
+            document.getElementById("loginBox").classList.remove("active");
+            document.getElementById("appBox").classList.add("active");
             loadFiles();
-            console.log('12. 初始化完成');
-        })();
-    </script>
+        } else {
+            alert("密码错误");
+        }
+    }
+
+    // 加载文件
+    async function loadFiles() {
+        const dom = document.getElementById("fileList");
+        dom.innerHTML = "加载中...";
+        const { data, error } = await supabase.storage.from("files").list();
+        if (error) {
+            dom.innerHTML = "加载失败：" + error.message;
+            return;
+        }
+        allFiles = data;
+        renderFiles(data);
+    }
+
+    // 渲染文件
+    function renderFiles(list) {
+        const dom = document.getElementById("fileList");
+        if (list.length === 0) {
+            dom.innerHTML = "<div style='padding:20px'>暂无文件</div>";
+            return;
+        }
+
+        let html = "";
+        list.forEach(f => {
+            const url = supabase.storage.from("files").getPublicUrl(f.name).data.publicUrl;
+            const type = getFileType(f.name);
+
+            html += `
+            <div class="file-item">
+                <input type="checkbox" class="checkbox" value="${f.name}" onchange="toggleSelect('${f.name}')">
+                <div class="file-name">${f.name}</div>
+                <div class="file-actions">
+                    <a href="${url}" target="_blank"><button>查看</button></a>
+                    <button onclick="deleteSingle('${f.name}')">删除</button>
+                </div>
+            </div>`;
+        });
+        dom.innerHTML = html;
+    }
+
+    // 文件类型
+    function getFileType(name) {
+        const ext = name.split('.').pop().toLowerCase();
+        const img = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"];
+        const vid = ["mp4", "mov", "avi", "flv", "mkv"];
+        const aud = ["mp3", "wav", "flac", "m4a"];
+        const doc = ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt"];
+        if (img.includes(ext)) return "image";
+        if (vid.includes(ext)) return "video";
+        if (aud.includes(ext)) return "audio";
+        if (doc.includes(ext)) return "doc";
+        return "other";
+    }
+
+    // 分类切换
+    document.querySelectorAll(".category button").forEach(btn => {
+        btn.onclick = () => {
+            document.querySelectorAll(".category button").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            const t = btn.dataset.type;
+            if (t === "all") {
+                renderFiles(allFiles);
+                return;
+            }
+            const filtered = allFiles.filter(f => getFileType(f.name) === t);
+            renderFiles(filtered);
+        };
+    });
+
+    // 搜索
+    function searchFile() {
+        const kw = document.getElementById("search").value.toLowerCase();
+        const res = allFiles.filter(f => f.name.toLowerCase().includes(kw));
+        renderFiles(res);
+    }
+
+    // 选择文件
+    function toggleSelect(name) {
+        const i = selectedFiles.indexOf(name);
+        if (i > -1) selectedFiles.splice(i, 1);
+        else selectedFiles.push(name);
+    }
+
+    // 单个删除
+    async function deleteSingle(name) {
+        if (!confirm("确定删除？")) return;
+        await supabase.storage.from("files").remove([name]);
+        loadFiles();
+    }
+
+    // 删除选中
+    async function deleteSelected() {
+        if (selectedFiles.length === 0) {
+            alert("请选择文件");
+            return;
+        }
+        if (!confirm("确定删除选中的 " + selectedFiles.length + " 个文件？")) return;
+        await supabase.storage.from("files").remove(selectedFiles);
+        selectedFiles = [];
+        loadFiles();
+    });
+
+    // 批量下载
+    async function batchDownload() {
+        if (selectedFiles.length === 0) {
+            alert("请选择文件");
+            return;
+        }
+        selectedFiles.forEach(name => {
+            const url = supabase.storage.from("files").getPublicUrl(name).data.publicUrl;
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = name;
+            a.click();
+        });
+    }
+
+    // 上传文件（支持文件夹）
+    async function uploadFiles() {
+        const input = document.getElementById("fileInput");
+        const files = input.files;
+        if (!files.length) {
+            alert("请选择文件");
+            return;
+        }
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const safe = file.name.replace(/[^a-z0-9_\-.]/gi, "_");
+            const path = Date.now() + "_" + safe;
+            await supabase.storage.from("files").upload(path, file);
+        }
+
+        alert("上传完成");
+        input.value = "";
+        loadFiles();
+    }
+</script>
 </body>
 </html>
