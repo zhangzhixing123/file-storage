@@ -37,8 +37,7 @@
         .view-mode button.active {background:#409eff;color:#fff;}
         a.btn-sm {padding:3px 6px;border-radius:4px;text-decoration:none;font-size:12px;color:#fff;}
         .auto-del-box{background:#fff;padding:12px;border-radius:8px;margin:15px 0;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
-        .auto-del-select{padding:6px;border-radius:4px;border:1px solid #ccc;margin-right:8px;}
-        .upload-select{padding:6px;border-radius:4px;border:1px solid #ccc;margin-right:8px;}
+        .auto-del-select, .upload-select{padding:6px;border-radius:4px;border:1px solid #ccc;margin-right:8px;}
     </style>
 </head>
 <body>
@@ -80,8 +79,7 @@
             </div>
 
             <div class="tool-bar">
-                <select class="upload-select" id="uploadCat">
-                </select>
+                <select class="upload-select" id="uploadCat"></select>
                 <button onclick="triggerFileUpload()">🖼️ 上传文件/图片</button>
                 <button class="warn" onclick="checkAll()">☑ 一键全选</button>
                 <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
@@ -229,7 +227,7 @@
         document.getElementById("categoryList").innerHTML = h;
 
         let sel = document.getElementById("uploadCat");
-        sel.innerHTML = cats.map(v=>`<option value="${v}">${v}</option>`).join('');
+        sel.innerHTML = cats.filter(x=>x!=='全部文件').map(v=>`<option value="${v}">${v}</option>`).join('');
     }
 
     window.addCategory=()=>{
@@ -292,7 +290,10 @@
                 if(dateStart && d<dateStart) dateOk=false;
                 if(dateEnd && d>dateEnd) dateOk=false;
             }
-            let catOk = currentCat === '全部文件' || (f.metadata?.category === currentCat);
+            let catOk = true;
+            if(currentCat !== '全部文件'){
+                catOk = f.name.startsWith(`[${currentCat}]`);
+            }
             return nameOk && dateOk && catOk;
         });
 
@@ -302,6 +303,7 @@
         if(viewType=='list'){
             let h="";
             list.forEach(f=>{
+                let displayName = f.name.replace(/^\[.*?\]/,'');
                 let url=sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
                 let size=formatSize(f.metadata?.size);
                 let time=formatTime(f.created_at||f.updated_at);
@@ -309,7 +311,7 @@
                 <div class="file-item">
                     <input type="checkbox" class="file-chk" value="${f.name}">
                     <div class="file-info">
-                        <div>${f.name}</div>
+                        <div>${displayName}</div>
                         <div class="file-size-text">大小：${size}</div>
                         <div class="file-time-text">上传时间：${time}</div>
                     </div>
@@ -324,6 +326,7 @@
         }else{
             let h='<div class="file-grid">';
             list.forEach(f=>{
+                let displayName = f.name.replace(/^\[.*?\]/,'');
                 let url=sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
                 let isImg=/\.(jpg|jpeg|png|gif|webp)$/i.test(f.name);
                 let size=formatSize(f.metadata?.size);
@@ -332,7 +335,7 @@
                 <div class="grid-item">
                     <input type="checkbox" class="file-chk" value="${f.name}">
                     ${isImg?`<img src="${url}">`:`<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
-                    <div class="name">${f.name}</div>
+                    <div class="name">${displayName}</div>
                     <div style="font-size:12px;color:#666">${size}</div>
                     <div style="font-size:11px;color:#999">${time}</div>
                     <div style="margin-top:6px;display:flex;gap:4px;justify-content:center;">
@@ -350,11 +353,14 @@
     document.getElementById("fileInput").onchange=async e=>{
         let fs=e.target.files;
         let cat = document.getElementById("uploadCat").value;
+        if(!cat){
+            alert("请先创建分类");
+            return;
+        }
         for(let f of fs){
-            let safe=f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g,'_');
-            await sb.storage.from("files").upload(safe,f,{
-                metadata: {category: cat}
-            });
+            let newName = `[${cat}]${f.name}`;
+            let safe=newName.replace(/[^\w\u4e00-\u9fa5.\-]/g,'_');
+            await sb.storage.from("files").upload(safe,f);
         }
         alert("上传成功");
         e.target.value="";
