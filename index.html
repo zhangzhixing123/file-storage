@@ -27,7 +27,6 @@
         button {padding: 8px 14px;border: none;border-radius: 6px;background: #409eff;color: #fff;cursor: pointer;}
         button.danger {background:#f56c6c;}
         button.warn {background:#e6a23c;}
-        button.small {padding:3px 8px;font-size:12px;}
         .search-wrap {display: flex;gap: 5px;flex-wrap: wrap;align-items: center;}
         input.search, input.date-input {padding: 8px 12px;border: 1px solid #ddd;border-radius: 6px;min-width: 150px;}
         .file-item {background: #fff;padding: 10px 12px;margin: 6px 0;border-radius: 8px;display: flex;justify-content: space-between;align-items: center;flex-wrap:wrap;gap:8px;}
@@ -43,21 +42,17 @@
         a.btn-sm {padding:3px 6px;border-radius:4px;text-decoration:none;font-size:12px;color:#fff;}
         .auto-del-box{background:#fff;padding:12px;border-radius:8px;margin:15px 0;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
         .auto-del-select{padding:6px;border-radius:4px;border:1px solid #ccc;margin-right:8px;}
-        
-        /* 分页样式 */
         .pagination{margin-top:20px;display:flex;gap:8px;align-items:center;}
         .page-btn{padding:6px 12px;background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer;}
-        .page-btn.active{background:#409eff;color:#fff;border-color:#409eff;}
         .page-info{font-size:14px;color:#666;margin-left:10px;}
     </style>
 </head>
 <body>
 
-<!-- 登录页 -->
+<!-- 登录 -->
 <div class="login-wrap" id="loginPage">
     <div class="login-box">
         <div class="login-title">系统登录</div>
-        <input class="login-input" id="userName" placeholder="请输入账号">
         <input class="login-input" id="userPwd" type="password" placeholder="请输入密码">
         <button class="login-btn" onclick="userLogin()">立即登录</button>
     </div>
@@ -77,7 +72,7 @@
             <div class="progress-bar">
                 <div class="progress-inner" id="storageProgress"></div>
             </div>
-            <div id="storageText">正在统计空间...</div>
+            <div id="storageText">加载中...</div>
         </div>
 
         <div class="auto-del-box">
@@ -121,8 +116,6 @@
         <hr>
 
         <div id="fileBox">加载中...</div>
-        
-        <!-- 分页按钮 -->
         <div class="pagination" id="pagination"></div>
     </div>
 </div>
@@ -130,20 +123,23 @@
 <input type="file" id="fileInput" multiple style="display:none">
 
 <script>
-// ========== 登录 ==========
+// ==================== 登录 ====================
 const FIX_PWD = "123456";
+let autoRefreshTimer; // 自动刷新定时器
+
 function userLogin(){
     let pwd = document.getElementById("userPwd").value.trim();
     if(pwd === FIX_PWD){
         document.getElementById("loginPage").classList.add("hide-page");
         document.getElementById("mainSystem").classList.remove("hide-page");
-        initLoad();
+        loadAllFiles(); // 一登录就加载全部文件
+        startAutoRefresh(); // 启动2分钟自动刷新
     }else{
         alert("密码错误");
     }
 }
 
-// ========== 系统核心 ==========
+// ==================== 核心功能 ====================
 (function() {
     const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
@@ -156,11 +152,8 @@ function userLogin(){
     let dateEnd = '';
     let totalStorageGB = parseFloat(localStorage.getItem('totalStorageGB')) || 1;
     let autoDelDay = parseInt(localStorage.getItem('autoDelDay')) || 0;
-
-    // 分页配置
-    let pageSize = 20;
+    let pageSize = 9999; // 显示全部文件
     let currentPage = 1;
-    let totalPages = 0;
     let filteredFiles = [];
 
     document.getElementById('totalGB').value = totalStorageGB;
@@ -172,45 +165,39 @@ function userLogin(){
         document.getElementById('nowDelSet').innerText=map[autoDelDay];
     }
 
-    function formatSize(bytes) {
-        if (!bytes) return "0 B";
-        if (bytes < 1024) return bytes + " B";
-        else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
-        else return (bytes / 1024 / 1024).toFixed(2) + " MB";
+    function formatSize(b) {
+        if (!b) return "0 B";
+        if (b < 1024) return b + " B";
+        if (b < 1048576) return (b / 1024).toFixed(2) + " KB";
+        return (b / 1048576).toFixed(2) + " MB";
     }
 
-    function formatTime(iso) {
-        if (!iso) return '';
-        let d = new Date(iso);
-        return d.toLocaleString();
+    function formatTime(t) {
+        return t ? new Date(t).toLocaleString() : "";
     }
 
     function getBeforeDayStr(day){
-        let now=new Date();
-        now.setDate(now.getDate()-day);
+        let now = new Date();
+        now.setDate(now.getDate() - day);
         return now.toISOString().split('T')[0];
     }
 
     document.getElementById('delDaySelect').addEventListener('change',function(){
-        autoDelDay=parseInt(this.value);
-        localStorage.setItem('autoDelDay',autoDelDay);
+        autoDelDay = parseInt(this.value);
+        localStorage.setItem('autoDelDay', autoDelDay);
         setDelText();
     })
 
-    window.runAutoDelete=async function(){
-        let day=parseInt(document.getElementById('delDaySelect').value);
-        if(day===0){alert("请选择周期");return;}
-        let bd=getBeforeDayStr(day);
-        let dl=[];
-        allFiles.forEach(i=>{
-            if(!i.created_at)return;
-            if(i.created_at.split('T')[0]<bd)dl.push(i.name);
-        })
-        if(dl.length===0){alert("无过期文件");return;}
-        if(!confirm(`删除${dl.length}个？`))return;
+    window.runAutoDelete = async function(){
+        let day = parseInt(document.getElementById('delDaySelect').value);
+        if(day === 0){ alert("请选择周期"); return; }
+        let bd = getBeforeDayStr(day);
+        let dl = allFiles.filter(i => i.created_at && i.created_at.split('T')[0] < bd).map(i => i.name);
+        if(dl.length === 0){ alert("无过期文件"); return; }
+        if(!confirm(`删除${dl.length}个文件？`)) return;
         await sb.storage.from("files").remove(dl);
         alert("清理完成");
-        initLoad();
+        loadAllFiles();
     }
 
     async function autoCleanWhenFull(totalBytes){
@@ -219,130 +206,95 @@ function userLogin(){
         if(pct >= 99.9){
             let sorted = [...allFiles].sort((a,b)=> new Date(a.created_at||0) - new Date(b.created_at||0));
             let delCount = Math.ceil(sorted.length * 0.1);
-            if(delCount <1) delCount=1;
-            let delList = sorted.slice(0,delCount).map(i=>i.name);
+            let delList = sorted.slice(0, delCount).map(i=>i.name);
             await sb.storage.from("files").remove(delList);
-            return true;
         }
-        return false;
     }
 
     window.saveStorage = function(){
         let v = parseFloat(document.getElementById('totalGB').value);
-        if(isNaN(v)||v<=0){alert("请输入有效容量");return;}
+        if(isNaN(v)||v<=0){ alert("请输入有效容量"); return; }
         totalStorageGB = v;
-        localStorage.setItem('totalStorageGB',v);
-        initLoad();
+        localStorage.setItem('totalStorageGB', v);
+        loadAllFiles();
     }
 
     function updateTotalSpace(totalBytes){
         let total = totalStorageGB * 1024*1024*1024;
-        let pct = total>0 ? (totalBytes/total*100).toFixed(2) : 0;
-        let used = (totalBytes/1024/1024).toFixed(2);
-        let max = (totalStorageGB*1024).toFixed(2);
+        let pct = total > 0 ? (totalBytes / total * 100).toFixed(2) : 0;
+        let used = (totalBytes / 1024 / 1024).toFixed(2);
+        let max = (totalStorageGB * 1024).toFixed(2);
         document.getElementById('storageProgress').style.width = pct+'%';
-        document.getElementById('storageText').innerText = `全部文件总大小：${used} MB / 总容量：${max} MB  占用占比：${pct}%`;
+        document.getElementById('storageText').innerText = `总大小：${used} MB / 容量：${max} MB  占用：${pct}%`;
     }
 
-    window.checkAll=()=>document.querySelectorAll(".file-chk").forEach(x=>x.checked=true);
-    window.unCheckAll=()=>document.querySelectorAll(".file-chk").forEach(x=>x.checked=false);
+    window.checkAll = () => document.querySelectorAll(".file-chk").forEach(x => x.checked = true);
+    window.unCheckAll = () => document.querySelectorAll(".file-chk").forEach(x => x.checked = false);
 
-    window.changeView=(t)=>{
-        viewType=t;
+    window.changeView = (t) => {
+        viewType = t;
         document.querySelectorAll(".view-mode button").forEach(x=>x.classList.remove("active"));
-        document.getElementById(t==='list'?'listBtn':'gridBtn').classList.add("active");
-        renderPage();
+        document.getElementById(t === 'list' ? 'listBtn' : 'gridBtn').classList.add("active");
+        renderFiles();
     }
 
-    // ==============================================
-    // 【关键修改】点击搜索 = 强制刷新最新文件 + 搜索
-    // ==============================================
+    // 点击搜索 = 强制刷新最新文件
     window.doSearch = async function(){
         searchTxt = document.getElementById("search").value.trim().toLowerCase();
-        await initLoad(); // 每次点击都重新拉取服务器最新文件
+        await loadAllFiles();
     }
 
     window.searchByDate = async function(){
         dateStart = document.getElementById("startDate").value;
         dateEnd = document.getElementById("endDate").value;
-        await initLoad(); // 时间搜索也同步刷新
+        await loadAllFiles();
     }
 
-    window.triggerFileUpload=()=>document.getElementById("fileInput").click();
+    window.triggerFileUpload = () => document.getElementById("fileInput").click();
 
-    // 首次加载（只拿列表，不渲染全部）
-    async function initLoad(){
-        let box=document.getElementById("fileBox");
+    // 加载全部文件（登录进页、自动刷新、搜索都用这个）
+    window.loadAllFiles = async function(){
+        let box = document.getElementById("fileBox");
         box.innerHTML = "加载中...";
-        let {data,error} = await sb.storage.from("files").list();
-        if(error){box.innerHTML="加载失败";return;}
+        let { data, error } = await sb.storage.from("files").list();
+        if(error){ box.innerHTML = "加载失败："+error.message; return; }
         allFiles = data || [];
         let total = 0;
-        allFiles.forEach(i=>total+=i.metadata?.size||0);
+        allFiles.forEach(i => total += i.metadata?.size || 0);
         await autoCleanWhenFull(total);
         updateTotalSpace(total);
-        refreshFilter();
+        renderFiles();
     }
 
-    // 刷新筛选 + 分页
-    function refreshFilter(){
-        filteredFiles = allFiles.filter(f=>{
+    // 渲染全部文件
+    function renderFiles(){
+        filteredFiles = allFiles.filter(f => {
             let nameOk = f.name.toLowerCase().includes(searchTxt);
-            let t = f.created_at||f.updated_at||'';
+            let t = f.created_at || f.updated_at || '';
             let dateOk = true;
             if(dateStart && t){
                 let d = t.split('T')[0];
-                if(dateStart && d<dateStart) dateOk=false;
-                if(dateEnd && d>dateEnd) dateOk=false;
+                if(dateStart && d < dateStart) dateOk = false;
+                if(dateEnd && d > dateEnd) dateOk = false;
             }
             return nameOk && dateOk;
         });
-        currentPage = 1;
-        renderPage();
-    }
 
-    // 渲染当前页
-    function renderPage(){
-        totalPages = Math.ceil(filteredFiles.length / pageSize);
-        let start = (currentPage-1)*pageSize;
-        let end = start + pageSize;
-        let list = filteredFiles.slice(start, end);
-        renderFiles(list);
-        renderPagination();
-    }
+        let box = document.getElementById("fileBox");
+        if(filteredFiles.length === 0){ box.innerHTML = "无匹配文件"; return; }
 
-    // 渲染分页按钮
-    function renderPagination(){
-        let dom = document.getElementById("pagination");
-        let html = "";
-        if(currentPage>1) html+=`<button class="page-btn" onclick="goPage(${currentPage-1})">上一页</button>`;
-        html+=`<span class="page-info">第 ${currentPage} / ${totalPages} 页，共 ${filteredFiles.length} 个文件</span>`;
-        if(currentPage < totalPages) html+=`<button class="page-btn" onclick="goPage(${currentPage+1})">下一页</button>`;
-        dom.innerHTML = html;
-    }
-
-    window.goPage = (num)=>{
-        if(num<1||num>totalPages)return;
-        currentPage=num;
-        renderPage();
-    }
-
-    function renderFiles(list){
-        let box=document.getElementById("fileBox");
-        if(list.length===0){box.innerHTML="无匹配文件";return;}
-
-        if(viewType==='list'){
-            let h="";
-            list.forEach(f=>{
-                let url=sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
-                let size=formatSize(f.metadata?.size);
-                let time=formatTime(f.created_at||f.updated_at);
-                h+=`
+        if(viewType === 'list'){
+            let h = "";
+            filteredFiles.forEach(f => {
+                let url = sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
+                let size = formatSize(f.metadata?.size);
+                let time = formatTime(f.created_at || f.updated_at);
+                h += `
                 <div class="file-item">
                     <input type="checkbox" class="file-chk" value="${f.name}">
                     <div class="file-info">
                         <div>${f.name}</div>
-                        <div class="file-size-text">文件大小：${size}</div>
+                        <div class="file-size-text">大小：${size}</div>
                         <div class="file-time-text">上传时间：${time}</div>
                     </div>
                     <div>
@@ -352,18 +304,18 @@ function userLogin(){
                     </div>
                 </div>`;
             });
-            box.innerHTML=h;
+            box.innerHTML = h;
         }else{
-            let h='<div class="file-grid">';
-            list.forEach(f=>{
-                let url=sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
-                let isImg=/\.(jpg|jpeg|png|gif|webp)$/i.test(f.name);
-                let size=formatSize(f.metadata?.size);
-                let time=formatTime(f.created_at||f.updated_at);
-                h+=`
+            let h = '<div class="file-grid">';
+            filteredFiles.forEach(f => {
+                let url = sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
+                let isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name);
+                let size = formatSize(f.metadata?.size);
+                let time = formatTime(f.created_at || f.updated_at);
+                h += `
                 <div class="grid-item">
                     <input type="checkbox" class="file-chk" value="${f.name}">
-                    ${isImg?`<img src="${url}">`:`<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
+                    ${isImg ? `<img src="${url}">` : `<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
                     <div class="name">${f.name}</div>
                     <div style="font-size:12px;color:#666">${size}</div>
                     <div style="font-size:11px;color:#999">${time}</div>
@@ -374,47 +326,57 @@ function userLogin(){
                     </div>
                 </div>`;
             });
-            h+="</div>";
-            box.innerHTML=h;
+            h += "</div>";
+            box.innerHTML = h;
         }
     }
 
-    document.getElementById("fileInput").onchange=async e=>{
-        let fs=e.target.files;
+    // 上传文件
+    document.getElementById("fileInput").onchange = async e => {
+        let fs = e.target.files;
         for(let f of fs){
-            let safe=f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g,'_');
-            await sb.storage.from("files").upload(safe,f);
+            let safe = f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g, '_');
+            await sb.storage.from("files").upload(safe, f);
         }
         alert("上传成功");
-        e.target.value="";
-        initLoad();
+        e.target.value = "";
+        loadAllFiles();
     }
 
-    window.delOne=async (name)=>{
-        if(!confirm("确定删除？"))return;
+    window.delOne = async name => {
+        if(!confirm("确定删除？")) return;
         await sb.storage.from("files").remove([name]);
-        initLoad();
+        loadAllFiles();
     }
 
-    document.getElementById("batchDelete").onclick=async ()=>{
-        let arr=Array.from(document.querySelectorAll(".file-chk:checked")).map(x=>x.value);
-        if(arr.length===0){alert("请勾选");return;}
-        if(!confirm(`删除${arr.length}个？`))return;
+    document.getElementById("batchDelete").onclick = async () => {
+        let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+        if(arr.length === 0){ alert("请先勾选文件"); return; }
+        if(!confirm(`确定删除 ${arr.length} 个文件？`)) return;
         await sb.storage.from("files").remove(arr);
-        initLoad();
+        loadAllFiles();
     }
 
-    document.getElementById("batchDownload").onclick=()=>{
-        let arr=Array.from(document.querySelectorAll(".file-chk:checked")).map(x=>x.value);
-        if(arr.length===0){alert("请勾选");return;}
-        arr.forEach(n=>{
-            let url=sb.storage.from("files").getPublicUrl(n).data.publicUrl;
-            let a=document.createElement("a");a.href=url;a.download=n;a.click();
+    document.getElementById("batchDownload").onclick = () => {
+        let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+        if(arr.length === 0){ alert("请先勾选文件"); return; }
+        arr.forEach(n => {
+            let url = sb.storage.from("files").getPublicUrl(n).data.publicUrl;
+            let a = document.createElement("a");
+            a.href = url;
+            a.download = n;
+            a.click();
         });
     }
-
-    window.initLoad = initLoad;
 })();
+
+// 2分钟自动刷新最新文件
+function startAutoRefresh(){
+    if(autoRefreshTimer) clearInterval(autoRefreshTimer);
+    autoRefreshTimer = setInterval(() => {
+        loadAllFiles();
+    }, 120000); // 120000ms = 2分钟
+}
 </script>
 </body>
 </html>
