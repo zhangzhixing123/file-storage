@@ -1,113 +1,105 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的文件库</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style>
-        *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
-        body{background:#f4f7fc;padding:20px;}
-        .tools{margin:20px 0;display:flex;gap:10px;flex-wrap:wrap;}
-        button{padding:10px 16px;background:#667eea;color:white;border:none;border-radius:8px;cursor:pointer;}
-        button.danger{background:#f56c6c;}
-        .file-item{background:#fff;padding:12px;margin:8px 0;border-radius:10px;display:flex;justify-content:space-between;align-items:center;}
-        h1{margin-bottom:10px;}
-    </style>
 </head>
 <body>
+    <h2>共享文件存储</h2>
+    <input type="file" id="fileInput" multiple>
+    <br><br>
+    <button id="uploadBtn">上传文件</button>
+    <hr>
+    <div id="fileList">正在加载文件列表...</div>
 
-<h1>📁 我的文件库</h1>
-
-<div class="tools">
-    <input type="file" id="fileInput" multiple webkitdirectory directory>
-    <button onclick="upload()">📤 上传文件/文件夹</button>
-    <button onclick="batchDownload()">📥 批量下载</button>
-    <button class="danger" onclick="batchDel()">🗑️ 批量删除</button>
-</div>
-
-<div id="fileList">加载中...</div>
-
-<script>
-// ========== 配置 ==========
-const SUPABASE_URL = "https://ivmgttyeszqvlqnpqsrw.supabase.co";
-const SUPABASE_KEY = "sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V";
-
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-// 加载文件（带5秒超时）
-async function loadFiles() {
-    let dom = document.getElementById("fileList");
-    dom.innerHTML = "加载中...";
-
-    try {
-        // 关键：给请求加个5秒超时，防止无限卡住
-        const { data, error } = await Promise.race([
-            supabase.storage.from("files").list(),
-            new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("请求超时")), 5000)
-            )
-        ]);
-
-        if (error) throw error;
-
-        let html = "";
-        data.forEach(f => {
-            let url = supabase.storage.from("files").getPublicUrl(f.name).data.publicUrl;
-            html += `
-            <div class="file-item">
-                <input type="checkbox" value="${f.name}"> ${f.name}
-                <div>
-                    <a href="${url}" target="_blank">打开</a> &nbsp;
-                    <button onclick="del('${f.name}')" style="padding:5px 8px;font-size:12px">删除</button>
-                </div>
-            </div>`;
-        });
-        dom.innerHTML = html;
-    } catch (err) {
-        dom.innerHTML = `加载失败：${err.message}`;
-    }
-}
-
-// 上传
-async function upload() {
-    let files = document.getElementById("fileInput").files;
-    for (let f of files) {
-        let safe = f.name.replace(/[^a-z0-9_\-.]/gi, "_");
-        await supabase.storage.from("files").upload(Date.now() + "_" + safe, f);
-    }
-    alert("上传成功");
-    loadFiles();
-}
-
-// 删除单个
-async function del(name) {
-    if (!confirm("确定删除？")) return;
-    await supabase.storage.from("files").remove([name]);
-    loadFiles();
-}
-
-// 批量删除
-async function batchDel() {
-    let arr = Array.from(document.querySelectorAll("input:checked")).map(i => i.value);
-    if (arr.length === 0) return alert("请选择文件");
-    await supabase.storage.from("files").remove(arr);
-    loadFiles();
-}
-
-// 批量下载
-function batchDownload() {
-    let arr = Array.from(document.querySelectorAll("input:checked")).map(i => i.value);
-    arr.forEach(n => {
-        let u = supabase.storage.from("files").getPublicUrl(n).data.publicUrl;
-        let a = document.createElement("a");
-        a.href = u; a.download = n; a.click();
-    });
-}
-
-// 页面加载完成后执行
-loadFiles();
-</script>
-
+    <script>
+        (function() {
+            // 配置
+            const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
+            const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
+            
+            console.log('1. 开始初始化');
+            
+            // 创建 Supabase 客户端
+            const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            console.log('2. Supabase 客户端创建完成');
+            
+            // 加载文件列表
+            async function loadFiles() {
+                console.log('3. loadFiles 开始执行');
+                const container = document.getElementById('fileList');
+                container.innerHTML = '正在加载...';
+                
+                try {
+                    const { data, error } = await supabase.storage.from('files').list();
+                    console.log('4. Supabase 返回结果', { data, error });
+                    
+                    if (error) {
+                        container.innerHTML = '加载失败: ' + error.message;
+                        return;
+                    }
+                    
+                    if (!data || data.length === 0) {
+                        container.innerHTML = '暂无文件，请上传';
+                        return;
+                    }
+                    
+                    let html = '';
+                    for (let file of data) {
+                        const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
+                        html += `<div>📄 ${file.name} - <a href="${url}" target="_blank">查看/下载</a></div>`;
+                    }
+                    container.innerHTML = html;
+                    console.log('5. 文件列表渲染完成，共', data.length, '个文件');
+                } catch (err) {
+                    console.error('6. loadFiles 出错:', err);
+                    container.innerHTML = '加载出错: ' + err.message;
+                }
+            }
+            
+            // 上传文件
+            async function uploadFiles(files) {
+                console.log('7. uploadFiles 开始，文件数量:', files.length);
+                
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const fileName = Date.now() + '_' + file.name;
+                    console.log(`8. 正在上传第 ${i+1} 个文件:`, fileName);
+                    
+                    const { error } = await supabase.storage.from('files').upload(fileName, file);
+                    if (error) {
+                        alert(`上传失败: ${file.name} - ${error.message}`);
+                        return false;
+                    }
+                    console.log(`9. 上传成功:`, fileName);
+                }
+                return true;
+            }
+            
+            // 绑定上传按钮事件
+            const uploadBtn = document.getElementById('uploadBtn');
+            uploadBtn.onclick = async function() {
+                console.log('10. 上传按钮被点击');
+                const fileInput = document.getElementById('fileInput');
+                const files = fileInput.files;
+                
+                if (!files.length) {
+                    alert('请先选择文件');
+                    return;
+                }
+                
+                const success = await uploadFiles(files);
+                if (success) {
+                    alert('上传完成！');
+                    fileInput.value = '';
+                    await loadFiles();
+                }
+            };
+            
+            // 页面加载完成后自动加载文件列表
+            console.log('11. 准备加载文件列表');
+            loadFiles();
+            console.log('12. 初始化完成');
+        })();
+    </script>
 </body>
 </html>
