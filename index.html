@@ -2,351 +2,417 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>共享文件存储</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>私有文件存储系统</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: Arial, sans-serif;
+            font-family: "Microsoft Yahei", system-ui, sans-serif;
         }
 
         body {
-            background: #f5f7fa;
-            padding: 20px;
-        }
-
-        /* 登录界面 */
-        .login {
-            max-width: 400px;
-            margin: 100px auto;
-            background: white;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            display: none;
-        }
-
-        .login.active {
-            display: block;
-        }
-
-        .login h2 {
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        .login input {
-            width: 100%;
-            padding: 12px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-        }
-
-        .login button {
-            width: 100%;
-            padding: 12px;
-            background: #409eff;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            margin-top: 10px;
-        }
-
-        /* 主界面 */
-        .app {
-            display: none;
-        }
-
-        .app.active {
-            display: block;
-        }
-
-        .tool-bar {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-
-        button {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 6px;
-            background: #409eff;
-            color: white;
-            cursor: pointer;
-        }
-
-        button.danger {
-            background: #f56c6c;
-        }
-
-        input.search {
-            flex: 1;
-            min-width: 200px;
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-        }
-
-        .category {
-            margin: 15px 0;
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .category button {
-            background: #e4e7ed;
+            background: #f4f7fc;
             color: #333;
         }
 
-        .category button.active {
-            background: #409eff;
-            color: white;
+        .login-wrap {
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        /* 文件列表 */
-        .file-list {
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
+        .login-box {
+            width: 90%;
+            max-width: 420px;
+            background: #fff;
+            border-radius: 20px;
+            padding: 40px 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            text-align: center;
         }
 
-        .file-item {
-            padding: 12px 15px;
-            border-bottom: 1px solid #eee;
+        .login-box h2 {
+            color: #222;
+            margin-bottom: 12px;
+            font-size: 24px;
+        }
+
+        .login-box p {
+            color: #999;
+            margin-bottom: 30px;
+        }
+
+        .login-box input {
+            width: 100%;
+            height: 50px;
+            padding: 0 16px;
+            border: 1px solid #eee;
+            border-radius: 12px;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
+        .login-box button {
+            width: 100%;
+            height: 50px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+            font-size: 17px;
+            cursor: pointer;
+        }
+
+        .err-tip {
+            color: #f56c6c;
+            font-size: 14px;
+            height: 20px;
+        }
+
+        .container {
+            display: none;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            background: #fff;
+            padding: 16px 20px;
+            border-radius: 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
         }
 
-        .file-item:hover {
-            background: #fafafa;
+        .header h1 {
+            font-size: 20px;
+            color: #222;
         }
 
-        .file-name {
-            flex: 1;
+        .logout-btn {
+            padding: 8px 16px;
+            background: #f56c6c;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
         }
 
-        .file-actions {
+        .toolbar {
             display: flex;
-            gap: 8px;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+            align-items: center;
         }
 
-        .file-actions button {
-            padding: 5px 10px;
-            font-size: 12px;
+        .toolbar input.search {
+            flex: 1;
+            min-width: 220px;
+            height: 42px;
+            padding: 0 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
         }
 
-        /* 多选框 */
-        .checkbox {
-            margin-right: 10px;
+        .toolbar button {
+            padding: 0 18px;
+            height: 42px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
         }
+
+        .btn-primary { background: #667eea; color: #fff; }
+        .btn-success { background: #40b970; color: #fff; }
+        .btn-danger { background: #f56c6c; color: #fff; }
+
+        .category-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .category-bar button {
+            padding: 8px 18px;
+            border-radius: 20px;
+            border: none;
+            background: #eef1f8;
+            cursor: pointer;
+        }
+
+        .category-bar button.active {
+            background: #667eea;
+            color: #fff;
+        }
+
+        .file-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 16px;
+        }
+
+        .file-card {
+            background: #fff;
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+
+        .file-preview {
+            height: 140px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8f9fc;
+        }
+
+        .file-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .file-icon { font-size: 48px; }
+        .file-desc { padding: 12px; }
+        .file-name { font-size: 13px; word-break: break-all; }
+        .file-time { font-size: 11px; color: #999; margin-top: 6px; }
+        .file-check { padding: 8px 12px; border-top: 1px solid #f4f4f4; display: flex; justify-content: space-between; }
+        .empty-tip { text-align: center; padding: 80px 0; color: #999; }
+
+        .preview-modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; z-index: 999;
+        }
+        .preview-modal.show { display: flex; }
+        .preview-modal img, .preview-modal video { max-width: 90%; max-height: 90%; }
+        .close-preview { position: absolute; top: 30px; right: 30px; font-size: 30px; color: #fff; cursor: pointer; }
     </style>
 </head>
-
 <body>
 
-<!-- 登录界面 -->
-<div class="login active" id="loginBox">
-    <h2>🔒 登录</h2>
-    <input type="password" id="pwd" placeholder="请输入密码" autocomplete="off">
-    <button onclick="login()">登录</button>
+<div class="login-wrap" id="loginPage">
+    <div class="login-box">
+        <h2>🔐 私有文件存储系统</h2>
+        <p>输入访问密码进入系统</p>
+        <input type="password" id="pwdInput" placeholder="请输入登录密码">
+        <div class="err-tip" id="errTip"></div>
+        <button id="loginBtn">立即登录</button>
+    </div>
 </div>
 
-<!-- 主界面 -->
-<div class="app" id="appBox">
-    <div class="tool-bar">
-        <input type="file" id="fileInput" multiple webkitdirectory directory>
-        <button onclick="uploadFiles()">上传文件</button>
-        <button onclick="batchDownload()">批量下载</button>
-        <button class="danger" onclick="deleteSelected()">删除选中</button>
-        <input class="search" id="search" placeholder="搜索文件..." oninput="searchFile()">
+<div class="container" id="mainPage">
+    <div class="header">
+        <h1>📁 我的私有文件库</h1>
+        <button class="logout-btn" id="logoutBtn">退出登录</button>
     </div>
 
-    <div class="category">
-        <button class="active" data-type="all">全部</button>
-        <button data-type="image">图片</button>
-        <button data-type="video">视频</button>
-        <button data-type="audio">音频</button>
-        <button data-type="doc">文档</button>
-        <button data-type="other">其他</button>
+    <div class="toolbar">
+        <input type="file" id="fileUpload" multiple webkitdirectory directory>
+        <button class="btn-primary" id="uploadBtn">📤 上传/上传文件夹</button>
+        <button class="btn-success" id="batchDlBtn">📥 批量下载选中</button>
+        <button class="btn-danger" id="batchDelBtn">🗑️ 批量删除选中</button>
+        <input class="search" id="searchInput" placeholder="🔍 搜索文件名称...">
     </div>
 
-    <div class="file-list" id="fileList">
-        加载中...
+    <div class="category-bar">
+        <button class="active" data-cat="all">全部文件</button>
+        <button data-cat="image">🖼️ 图片</button>
+        <button data-cat="video">🎬 视频</button>
+        <button data-cat="audio">🎵 音频</button>
+        <button data-cat="doc">📄 文档</button>
+        <button data-cat="other">📦 其他</button>
     </div>
+
+    <div class="file-grid" id="fileBox"><div class="empty-tip">加载中...</div></div>
+</div>
+
+<div class="preview-modal" id="previewModal">
+    <span class="close-preview">×</span>
+    <div id="previewContent"></div>
 </div>
 
 <script>
     // ========== 配置 ==========
     const SUPABASE_URL = "https://ivmgttyeszqvlqnpqsrw.supabase.co";
     const SUPABASE_KEY = "sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V";
-    const LOGIN_PASSWORD = "123456";
-
-    let supabase;
-    let allFiles = [];
-    let selectedFiles = [];
+    const LOGIN_PASS = "123456";
 
     // 初始化
-    (function () {
-        supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        document.getElementById("loginBox").classList.add("active");
-    })();
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    let allFiles = [];
+    let currentCategory = "all";
 
-    // 登录
-    function login() {
-        const p = document.getElementById("pwd").value;
-        if (p === LOGIN_PASSWORD) {
-            document.getElementById("loginBox").classList.remove("active");
-            document.getElementById("appBox").classList.add("active");
-            loadFiles();
-        } else {
-            alert("密码错误");
-        }
-    }
-
-    // 加载文件
-    async function loadFiles() {
-        const dom = document.getElementById("fileList");
-        dom.innerHTML = "加载中...";
-        const { data, error } = await supabase.storage.from("files").list();
-        if (error) {
-            dom.innerHTML = "加载失败：" + error.message;
+    // 登录（修复完成）
+    document.getElementById("loginBtn").onclick = function () {
+        const val = document.getElementById("pwdInput").value.trim();
+        const err = document.getElementById("errTip");
+        if (val !== LOGIN_PASS) {
+            err.innerText = "密码错误！";
             return;
         }
-        allFiles = data;
-        renderFiles(data);
-    }
+        err.innerText = "";
+        document.getElementById("loginPage").style.display = "none";
+        document.getElementById("mainPage").style.display = "block";
+        loadFiles();
+    };
 
-    // 渲染文件
-    function renderFiles(list) {
-        const dom = document.getElementById("fileList");
-        if (list.length === 0) {
-            dom.innerHTML = "<div style='padding:20px'>暂无文件</div>";
-            return;
-        }
+    // 回车登录
+    document.getElementById("pwdInput").onkeydown = function (e) {
+        if (e.key === "Enter") document.getElementById("loginBtn").click();
+    };
 
-        let html = "";
-        list.forEach(f => {
-            const url = supabase.storage.from("files").getPublicUrl(f.name).data.publicUrl;
-            const type = getFileType(f.name);
-
-            html += `
-            <div class="file-item">
-                <input type="checkbox" class="checkbox" value="${f.name}" onchange="toggleSelect('${f.name}')">
-                <div class="file-name">${f.name}</div>
-                <div class="file-actions">
-                    <a href="${url}" target="_blank"><button>查看</button></a>
-                    <button onclick="deleteSingle('${f.name}')">删除</button>
-                </div>
-            </div>`;
-        });
-        dom.innerHTML = html;
-    }
+    // 退出
+    document.getElementById("logoutBtn").onclick = function () {
+        document.getElementById("mainPage").style.display = "none";
+        document.getElementById("loginPage").style.display = "flex";
+        document.getElementById("pwdInput").value = "";
+    };
 
     // 文件类型
     function getFileType(name) {
-        const ext = name.split('.').pop().toLowerCase();
-        const img = ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"];
-        const vid = ["mp4", "mov", "avi", "flv", "mkv"];
-        const aud = ["mp3", "wav", "flac", "m4a"];
-        const doc = ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt"];
+        const ext = name.split(".").pop().toLowerCase();
+        const img = ["jpg","jpeg","png","gif","webp","bmp","svg"];
+        const video = ["mp4","mov","avi","mkv","flv","webm"];
+        const audio = ["mp3","wav","flac","m4a"];
+        const doc = ["txt","pdf","doc","docx","xls","xlsx","ppt","pptx"];
         if (img.includes(ext)) return "image";
-        if (vid.includes(ext)) return "video";
-        if (aud.includes(ext)) return "audio";
+        if (video.includes(ext)) return "video";
+        if (audio.includes(ext)) return "audio";
         if (doc.includes(ext)) return "doc";
         return "other";
     }
 
+    function getFileIcon(t) {
+        if(t==="image")return"🖼️";if(t==="video")return"🎬";if(t==="audio")return"🎵";if(t==="doc")return"📄";return"📦";
+    }
+
+    // 加载文件
+    async function loadFiles() {
+        const box = document.getElementById("fileBox");
+        const { data, error } = await supabase.storage.from("files").list();
+        if (error) { box.innerHTML = `<div class="empty-tip">错误：${error.message}</div>`; return; }
+        allFiles = data || [];
+        filterFiles();
+    }
+
+    // 筛选
+    function filterFiles() {
+        const key = document.getElementById("searchInput").value.toLowerCase();
+        let list = allFiles;
+        if (currentCategory !== "all") list = list.filter(i => getFileType(i.name) === currentCategory);
+        if (key) list = list.filter(i => i.name.toLowerCase().includes(key));
+        render(list);
+    }
+
     // 分类切换
-    document.querySelectorAll(".category button").forEach(btn => {
+    document.querySelectorAll(".category-bar button").forEach(btn => {
         btn.onclick = () => {
-            document.querySelectorAll(".category button").forEach(b => b.classList.remove("active"));
+            document.querySelectorAll(".category-bar button").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
-            const t = btn.dataset.type;
-            if (t === "all") {
-                renderFiles(allFiles);
-                return;
-            }
-            const filtered = allFiles.filter(f => getFileType(f.name) === t);
-            renderFiles(filtered);
+            currentCategory = btn.dataset.cat;
+            filterFiles();
         };
     });
 
     // 搜索
-    function searchFile() {
-        const kw = document.getElementById("search").value.toLowerCase();
-        const res = allFiles.filter(f => f.name.toLowerCase().includes(kw));
-        renderFiles(res);
+    document.getElementById("searchInput").oninput = filterFiles;
+
+    // 渲染
+    function render(list) {
+        const box = document.getElementById("fileBox");
+        if (!list.length) { box.innerHTML = '<div class="empty-tip">暂无文件</div>'; return; }
+        let html = "";
+        list.forEach(item => {
+            const t = getFileType(item.name);
+            const icon = getFileIcon(t);
+            const url = supabase.storage.from("files").getPublicUrl(item.name).data.publicUrl;
+            const time = new Date(item.created_at).toLocaleString();
+            html += `
+            <div class="file-card">
+                <div class="file-preview" onclick="pre('${url}','${t}')">
+                    ${t==="image"?`<img src="${url}">`:`<span class="file-icon">${icon}</span>`}
+                </div>
+                <div class="file-desc">
+                    <div class="file-name">${item.name}</div>
+                    <div class="file-time">${time}</div>
+                </div>
+                <div class="file-check">
+                    <input type="checkbox" class="check-item" value="${item.name}">
+                    <button style="background:#f56c6c;color:white;border:none;border-radius:4px" onclick="del('${item.name}')">删除</button>
+                </div>
+            </div>`;
+        });
+        box.innerHTML = html;
     }
 
-    // 选择文件
-    function toggleSelect(name) {
-        const i = selectedFiles.indexOf(name);
-        if (i > -1) selectedFiles.splice(i, 1);
-        else selectedFiles.push(name);
+    // 预览
+    function pre(url, t) {
+        const m = document.getElementById("previewModal");
+        const c = document.getElementById("previewContent");
+        if (t === "image") c.innerHTML = `<img src="${url}">`;
+        else if (t === "video") c.innerHTML = `<video controls src="${url}">`;
+        else { alert("仅支持图片/视频预览"); return; }
+        m.style.display = "flex";
     }
 
-    // 单个删除
-    async function deleteSingle(name) {
-        if (!confirm("确定删除？")) return;
+    // 关闭预览
+    document.querySelector(".close-preview").onclick = () => {
+        document.getElementById("previewModal").style.display = "none";
+    };
+
+    // 上传
+    document.getElementById("uploadBtn").onclick = async () => {
+        const i = document.getElementById("fileUpload");
+        const files = i.files;
+        if (!files.length) { alert("请选择文件/文件夹"); return; }
+        for (let f of files) {
+            const safe = f.name.replace(/[^a-z0-9_\-.]/gi,"_");
+            await supabase.storage.from("files").upload(Date.now()+"_"+safe, f);
+        }
+        alert("上传完成！");
+        i.value = "";
+        loadFiles();
+    };
+
+    // 删除单个
+    async function del(name) {
+        if(!confirm("确定删除？"))return;
         await supabase.storage.from("files").remove([name]);
         loadFiles();
     }
 
-    // 删除选中
-    async function deleteSelected() {
-        if (selectedFiles.length === 0) {
-            alert("请选择文件");
-            return;
-        }
-        if (!confirm("确定删除选中的 " + selectedFiles.length + " 个文件？")) return;
-        await supabase.storage.from("files").remove(selectedFiles);
-        selectedFiles = [];
+    // 批量删除
+    document.getElementById("batchDelBtn").onclick = async () => {
+        const arr = Array.from(document.querySelectorAll(".check-item:checked")).map(i=>i.value);
+        if(!arr.length){alert("请勾选");return;}
+        if(!confirm(`删除 ${arr.length} 个？`))return;
+        await supabase.storage.from("files").remove(arr);
         loadFiles();
-    });
+    };
 
     // 批量下载
-    async function batchDownload() {
-        if (selectedFiles.length === 0) {
-            alert("请选择文件");
-            return;
-        }
-        selectedFiles.forEach(name => {
-            const url = supabase.storage.from("files").getPublicUrl(name).data.publicUrl;
+    document.getElementById("batchDlBtn").onclick = () => {
+        const arr = Array.from(document.querySelectorAll(".check-item:checked")).map(i=>i.value);
+        if(!arr.length){alert("请勾选");return;}
+        arr.forEach(n=>{
+            const u = supabase.storage.from("files").getPublicUrl(n).data.publicUrl;
             const a = document.createElement("a");
-            a.href = url;
-            a.download = name;
-            a.click();
+            a.href=u;a.download=n;a.click();
         });
-    }
-
-    // 上传文件（支持文件夹）
-    async function uploadFiles() {
-        const input = document.getElementById("fileInput");
-        const files = input.files;
-        if (!files.length) {
-            alert("请选择文件");
-            return;
-        }
-
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const safe = file.name.replace(/[^a-z0-9_\-.]/gi, "_");
-            const path = Date.now() + "_" + safe;
-            await supabase.storage.from("files").upload(path, file);
-        }
-
-        alert("上传完成");
-        input.value = "";
-        loadFiles();
-    }
+    };
 </script>
 </body>
 </html>
