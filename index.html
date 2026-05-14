@@ -6,32 +6,17 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {font-family: Arial, sans-serif;padding: 20px;background: #f6f7f9;margin:0;}
-        /* 登录页面样式 */
         .login-wrap{
-            width:100vw;height:100vh;
-            display:flex;align-items:center;justify-content:center;
-            background:#f6f7f9;
-            position:fixed;top:0;left:0;z-index:9999;
+            width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;
+            background:#f6f7f9;position:fixed;top:0;left:0;z-index:9999;
         }
-        .login-box{
-            width:320px;padding:30px;background:#fff;border-radius:10px;
-            box-shadow:0 2px 15px rgba(0,0,0,0.1);
-        }
+        .login-box{width:320px;padding:30px;background:#fff;border-radius:10px;box-shadow:0 2px 15px rgba(0,0,0,0.1);}
         .login-title{text-align:center;font-size:20px;margin-bottom:25px;color:#333;}
-        .login-input{
-            width:100%;box-sizing:border-box;padding:12px 15px;
-            margin:10px 0;border:1px solid #ddd;border-radius:6px;
-            font-size:15px;
-        }
-        .login-btn{
-            width:100%;padding:12px;background:#409eff;
-            color:#fff;border:none;border-radius:6px;font-size:16px;
-            margin-top:15px;cursor:pointer;
-        }
+        .login-input{width:100%;box-sizing:border-box;padding:12px 15px;margin:10px 0;border:1px solid #ddd;border-radius:6px;font-size:15px;}
+        .login-btn{width:100%;padding:12px;background:#409eff;color:#fff;border:none;border-radius:6px;font-size:16px;margin-top:15px;cursor:pointer;}
         .hide-page{display:none !important;}
 
-        /* 原有系统样式 */
-        .main-container {display: block;gap: 20px;}
+        .main-container {display: block;}
         .content-area {width: 100%;}
         .storage-box {background:#fff;padding:15px;border-radius:8px;margin-bottom:15px;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
         .storage-line {display:flex;align-items:center;gap:10px;margin:8px 0;flex-wrap:wrap;}
@@ -40,8 +25,8 @@
         .progress-inner {height:100%;background:#409eff;transition:0.3s;}
         .tool-bar {margin: 15px 0;display: flex;gap: 10px;flex-wrap: wrap;align-items: center;}
         button {padding: 8px 14px;border: none;border-radius: 6px;background: #409eff;color: #fff;cursor: pointer;}
-        button.danger {background: #f56c6c;}
-        button.warn {background: #e6a23c;}
+        button.danger {background:#f56c6c;}
+        button.warn {background:#e6a23c;}
         button.small {padding:3px 8px;font-size:12px;}
         .search-wrap {display: flex;gap: 5px;flex-wrap: wrap;align-items: center;}
         input.search, input.date-input {padding: 8px 12px;border: 1px solid #ddd;border-radius: 6px;min-width: 150px;}
@@ -58,101 +43,107 @@
         a.btn-sm {padding:3px 6px;border-radius:4px;text-decoration:none;font-size:12px;color:#fff;}
         .auto-del-box{background:#fff;padding:12px;border-radius:8px;margin:15px 0;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
         .auto-del-select{padding:6px;border-radius:4px;border:1px solid #ccc;margin-right:8px;}
+        
+        /* 分页样式 */
+        .pagination{margin-top:20px;display:flex;gap:8px;align-items:center;}
+        .page-btn{padding:6px 12px;background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer;}
+        .page-btn.active{background:#409eff;color:#fff;border-color:#409eff;}
+        .page-info{font-size:14px;color:#666;margin-left:10px;}
     </style>
 </head>
 <body>
-    <!-- 独立登录页面 -->
-    <div class="login-wrap" id="loginPage">
-        <div class="login-box">
-            <div class="login-title">系统登录</div>
-            <input class="login-input" id="userName" placeholder="请输入账号">
-            <input class="login-input" id="userPwd" type="password" placeholder="请输入密码">
-            <button class="login-btn" onclick="userLogin()">立即登录</button>
-        </div>
+
+<!-- 登录页 -->
+<div class="login-wrap" id="loginPage">
+    <div class="login-box">
+        <div class="login-title">系统登录</div>
+        <input class="login-input" id="userName" placeholder="请输入账号">
+        <input class="login-input" id="userPwd" type="password" placeholder="请输入密码">
+        <button class="login-btn" onclick="userLogin()">立即登录</button>
     </div>
+</div>
 
-    <!-- 主文件管理系统 -->
-    <div class="main-container hide-page" id="mainSystem">
-        <h2>📁 文件存储管理系统</h2>
-        <div class="content-area">
-            <div class="storage-box">
-                <div class="storage-line">
-                    <span>总存储空间：</span>
-                    <input type="number" id="totalGB" value="1" min="0.1" step="0.1">
-                    <span>GB</span>
-                    <button class="small" onclick="saveStorage()">确认修改</button>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-inner" id="storageProgress"></div>
-                </div>
-                <div id="storageText">正在统计空间...</div>
+<!-- 主系统 -->
+<div class="main-container hide-page" id="mainSystem">
+    <h2>📁 文件存储管理系统</h2>
+    <div class="content-area">
+        <div class="storage-box">
+            <div class="storage-line">
+                <span>总存储空间：</span>
+                <input type="number" id="totalGB" value="1" min="0.1" step="0.1">
+                <span>GB</span>
+                <button class="small" onclick="saveStorage()">确认修改</button>
             </div>
-
-            <div class="auto-del-box">
-                <span>自动清理过期文件：</span>
-                <select class="auto-del-select" id="delDaySelect">
-                    <option value="0">不自动删除</option>
-                    <option value="7">7天前文件</option>
-                    <option value="15">15天前文件</option>
-                    <option value="30">30天前文件</option>
-                    <option value="60">60天前文件</option>
-                    <option value="90">90天前文件</option>
-                </select>
-                <button class="small danger" onclick="runAutoDelete()">立即清理</button>
-                <span style="font-size:12px;color:#666;margin-left:10px;">当前：<span id="nowDelSet">不自动删除</span></span>
+            <div class="progress-bar">
+                <div class="progress-inner" id="storageProgress"></div>
             </div>
-
-            <div class="tool-bar">
-                <button onclick="triggerFileUpload()">🖼️ 上传文件/图片</button>
-                <button class="warn" onclick="checkAll()">☑ 一键全选</button>
-                <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
-                <button id="batchDownload">📥 批量下载</button>
-                <button id="batchDelete" class="danger">🗑️ 批量删除</button>
-
-                <div class="search-wrap">
-                    <input class="search" id="search" placeholder="文件名搜索">
-                    <button onclick="doSearch()">搜索</button>
-                </div>
-
-                <div class="search-wrap">
-                    <input type="date" class="date-input" id="startDate">
-                    <span>~</span>
-                    <input type="date" class="date-input" id="endDate">
-                    <button onclick="searchByDate()">时间搜索</button>
-                </div>
-
-                <div class="view-mode">
-                    <button id="listBtn" class="active" onclick="changeView('list')">列表</button>
-                    <button id="gridBtn" onclick="changeView('grid')">九宫格</button>
-                </div>
-            </div>
-            <hr>
-            <div id="fileBox">加载中...</div>
+            <div id="storageText">正在统计空间...</div>
         </div>
-    </div>
 
-    <input type="file" id="fileInput" multiple style="display:none">
+        <div class="auto-del-box">
+            <span>自动清理过期文件：</span>
+            <select class="auto-del-select" id="delDaySelect">
+                <option value="0">不自动删除</option>
+                <option value="7">7天前文件</option>
+                <option value="15">15天前文件</option>
+                <option value="30">30天前文件</option>
+                <option value="60">60天前文件</option>
+                <option value="90">90天前文件</option>
+            </select>
+            <button class="small danger" onclick="runAutoDelete()">立即清理</button>
+            <span style="font-size:12px;color:#666;margin-left:10px;">当前：<span id="nowDelSet">不自动删除</span></span>
+        </div>
+
+        <div class="tool-bar">
+            <button onclick="triggerFileUpload()">🖼️ 上传文件/图片</button>
+            <button class="warn" onclick="checkAll()">☑ 一键全选</button>
+            <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
+            <button id="batchDownload">📥 批量下载</button>
+            <button id="batchDelete" class="danger">🗑️ 批量删除</button>
+
+            <div class="search-wrap">
+                <input class="search" id="search" placeholder="文件名搜索">
+                <button onclick="doSearch()">🔍 搜索/刷新</button>
+            </div>
+
+            <div class="search-wrap">
+                <input type="date" class="date-input" id="startDate">
+                <span>~</span>
+                <input type="date" class="date-input" id="endDate">
+                <button onclick="searchByDate()">时间搜索</button>
+            </div>
+
+            <div class="view-mode">
+                <button id="listBtn" class="active" onclick="changeView('list')">列表</button>
+                <button id="gridBtn" onclick="changeView('grid')">九宫格</button>
+            </div>
+        </div>
+        <hr>
+
+        <div id="fileBox">加载中...</div>
+        
+        <!-- 分页按钮 -->
+        <div class="pagination" id="pagination"></div>
+    </div>
+</div>
+
+<input type="file" id="fileInput" multiple style="display:none">
 
 <script>
-// ========== 独立登录逻辑 与业务代码完全隔离 ==========
-const FIX_PWD = "123456"; // 固定密码，页面不展示明文
+// ========== 登录 ==========
+const FIX_PWD = "123456";
 function userLogin(){
-    let username = document.getElementById("userName").value.trim();
     let pwd = document.getElementById("userPwd").value.trim();
-    if(!username){
-        alert("请输入账号");
-        return;
-    }
     if(pwd === FIX_PWD){
         document.getElementById("loginPage").classList.add("hide-page");
         document.getElementById("mainSystem").classList.remove("hide-page");
-        loadFiles(); // 登录成功加载文件系统
+        initLoad();
     }else{
-        alert("密码错误，请重新输入");
+        alert("密码错误");
     }
 }
 
-// ========== 原有文件系统全部代码不变 ==========
+// ========== 系统核心 ==========
 (function() {
     const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
@@ -165,6 +156,12 @@ function userLogin(){
     let dateEnd = '';
     let totalStorageGB = parseFloat(localStorage.getItem('totalStorageGB')) || 1;
     let autoDelDay = parseInt(localStorage.getItem('autoDelDay')) || 0;
+
+    // 分页配置
+    let pageSize = 20;
+    let currentPage = 1;
+    let totalPages = 0;
+    let filteredFiles = [];
 
     document.getElementById('totalGB').value = totalStorageGB;
     document.getElementById('delDaySelect').value = autoDelDay;
@@ -213,7 +210,7 @@ function userLogin(){
         if(!confirm(`删除${dl.length}个？`))return;
         await sb.storage.from("files").remove(dl);
         alert("清理完成");
-        loadFiles();
+        initLoad();
     }
 
     async function autoCleanWhenFull(totalBytes){
@@ -235,7 +232,7 @@ function userLogin(){
         if(isNaN(v)||v<=0){alert("请输入有效容量");return;}
         totalStorageGB = v;
         localStorage.setItem('totalStorageGB',v);
-        loadFiles();
+        initLoad();
     }
 
     function updateTotalSpace(totalBytes){
@@ -244,8 +241,7 @@ function userLogin(){
         let used = (totalBytes/1024/1024).toFixed(2);
         let max = (totalStorageGB*1024).toFixed(2);
         document.getElementById('storageProgress').style.width = pct+'%';
-        document.getElementById('storageText').innerText =
-        `全部文件总大小：${used} MB / 总容量：${max} MB  占用占比：${pct}%`;
+        document.getElementById('storageText').innerText = `全部文件总大小：${used} MB / 总容量：${max} MB  占用占比：${pct}%`;
     }
 
     window.checkAll=()=>document.querySelectorAll(".file-chk").forEach(x=>x.checked=true);
@@ -255,37 +251,42 @@ function userLogin(){
         viewType=t;
         document.querySelectorAll(".view-mode button").forEach(x=>x.classList.remove("active"));
         document.getElementById(t==='list'?'listBtn':'gridBtn').classList.add("active");
-        renderFiles();
+        renderPage();
     }
 
-    window.doSearch=()=>{
-        searchTxt=document.getElementById("search").value.trim().toLowerCase();
-        renderFiles();
+    // ==============================================
+    // 【关键修改】点击搜索 = 强制刷新最新文件 + 搜索
+    // ==============================================
+    window.doSearch = async function(){
+        searchTxt = document.getElementById("search").value.trim().toLowerCase();
+        await initLoad(); // 每次点击都重新拉取服务器最新文件
     }
 
-    window.searchByDate=()=>{
-        dateStart=document.getElementById("startDate").value;
-        dateEnd=document.getElementById("endDate").value;
-        renderFiles();
+    window.searchByDate = async function(){
+        dateStart = document.getElementById("startDate").value;
+        dateEnd = document.getElementById("endDate").value;
+        await initLoad(); // 时间搜索也同步刷新
     }
 
     window.triggerFileUpload=()=>document.getElementById("fileInput").click();
 
-    async function loadFiles(){
+    // 首次加载（只拿列表，不渲染全部）
+    async function initLoad(){
         let box=document.getElementById("fileBox");
-        box.innerHTML="加载中...";
-        let {data,error}=await sb.storage.from("files").list();
-        if(error){box.innerHTML="加载失败："+error.message;return;}
-        allFiles=data||[];
-        let total=0;
+        box.innerHTML = "加载中...";
+        let {data,error} = await sb.storage.from("files").list();
+        if(error){box.innerHTML="加载失败";return;}
+        allFiles = data || [];
+        let total = 0;
         allFiles.forEach(i=>total+=i.metadata?.size||0);
         await autoCleanWhenFull(total);
         updateTotalSpace(total);
-        renderFiles();
+        refreshFilter();
     }
 
-    function renderFiles(){
-        let list=allFiles.filter(f=>{
+    // 刷新筛选 + 分页
+    function refreshFilter(){
+        filteredFiles = allFiles.filter(f=>{
             let nameOk = f.name.toLowerCase().includes(searchTxt);
             let t = f.created_at||f.updated_at||'';
             let dateOk = true;
@@ -296,7 +297,37 @@ function userLogin(){
             }
             return nameOk && dateOk;
         });
+        currentPage = 1;
+        renderPage();
+    }
 
+    // 渲染当前页
+    function renderPage(){
+        totalPages = Math.ceil(filteredFiles.length / pageSize);
+        let start = (currentPage-1)*pageSize;
+        let end = start + pageSize;
+        let list = filteredFiles.slice(start, end);
+        renderFiles(list);
+        renderPagination();
+    }
+
+    // 渲染分页按钮
+    function renderPagination(){
+        let dom = document.getElementById("pagination");
+        let html = "";
+        if(currentPage>1) html+=`<button class="page-btn" onclick="goPage(${currentPage-1})">上一页</button>`;
+        html+=`<span class="page-info">第 ${currentPage} / ${totalPages} 页，共 ${filteredFiles.length} 个文件</span>`;
+        if(currentPage < totalPages) html+=`<button class="page-btn" onclick="goPage(${currentPage+1})">下一页</button>`;
+        dom.innerHTML = html;
+    }
+
+    window.goPage = (num)=>{
+        if(num<1||num>totalPages)return;
+        currentPage=num;
+        renderPage();
+    }
+
+    function renderFiles(list){
         let box=document.getElementById("fileBox");
         if(list.length===0){box.innerHTML="无匹配文件";return;}
 
@@ -356,31 +387,33 @@ function userLogin(){
         }
         alert("上传成功");
         e.target.value="";
-        loadFiles();
+        initLoad();
     }
 
     window.delOne=async (name)=>{
-        if(!confirm("确定删除该文件？"))return;
+        if(!confirm("确定删除？"))return;
         await sb.storage.from("files").remove([name]);
-        loadFiles();
+        initLoad();
     }
 
     document.getElementById("batchDelete").onclick=async ()=>{
         let arr=Array.from(document.querySelectorAll(".file-chk:checked")).map(x=>x.value);
-        if(arr.length===0){alert("请先勾选文件");return;}
-        if(!confirm(`确定批量删除选中${arr.length}个文件？`))return;
+        if(arr.length===0){alert("请勾选");return;}
+        if(!confirm(`删除${arr.length}个？`))return;
         await sb.storage.from("files").remove(arr);
-        loadFiles();
+        initLoad();
     }
 
     document.getElementById("batchDownload").onclick=()=>{
         let arr=Array.from(document.querySelectorAll(".file-chk:checked")).map(x=>x.value);
-        if(arr.length===0){alert("请先勾选文件");return;}
+        if(arr.length===0){alert("请勾选");return;}
         arr.forEach(n=>{
             let url=sb.storage.from("files").getPublicUrl(n).data.publicUrl;
             let a=document.createElement("a");a.href=url;a.download=n;a.click();
         });
     }
+
+    window.initLoad = initLoad;
 })();
 </script>
 </body>
