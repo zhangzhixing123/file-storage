@@ -7,58 +7,34 @@
     <style>
         body { font-family: system-ui; text-align: center; margin-top: 50px; }
         input, button { padding: 8px 16px; margin: 8px; }
-        #app { display: none; }
         .file-item { border: 1px solid #ccc; margin: 8px auto; padding: 8px; width: 300px; }
     </style>
 </head>
 <body>
 
-    <!-- 登录界面 -->
-    <div id="loginBox">
-        <h2>共享文件存储</h2>
-        <input type="password" id="password" placeholder="密码 123456">
-        <button onclick="login()">登录</button>
-        <p id="errorMsg" style="color:red"></p>
+    <h2>📁 共享文件存储</h2>
+    
+    <!-- 文件上传区域 -->
+    <div>
+        <input type="file" id="fileInput" multiple>
+        <button onclick="uploadFiles()">上传文件</button>
     </div>
 
-    <!-- 主界面 -->
-    <div id="app">
-        <h2>文件管理</h2>
-        <input type="file" id="fileInput" multiple>
-        <button onclick="uploadFiles()">上传</button>
-        <button onclick="logout()">退出</button>
-        <div id="fileList"></div>
-    </div>
+    <!-- 文件列表 -->
+    <div id="fileList" style="margin-top: 20px;">加载中...</div>
 
     <script>
-        // 您的正确配置
+        // 您的配置
         const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
-        const PASSWORD = '123456';
+        
         let supabase;
 
-        async function login() {
-            const pwd = document.getElementById('password').value;
-            if (pwd !== PASSWORD) {
-                document.getElementById('errorMsg').innerText = '密码错误';
-                return;
-            }
-            document.getElementById('errorMsg').innerText = '';
-            
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-            
-            document.getElementById('loginBox').style.display = 'none';
-            document.getElementById('app').style.display = 'block';
-            
-            await loadFiles();
-        }
+        // 初始化
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        loadFiles();
 
-        function logout() {
-            document.getElementById('app').style.display = 'none';
-            document.getElementById('loginBox').style.display = 'block';
-            document.getElementById('password').value = '';
-        }
-
+        // 加载文件列表
         async function loadFiles() {
             const container = document.getElementById('fileList');
             container.innerHTML = '加载中...';
@@ -70,26 +46,34 @@
             }
             
             if (!data || data.length === 0) {
-                container.innerHTML = '暂无文件';
+                container.innerHTML = '暂无文件，请上传';
                 return;
             }
             
             container.innerHTML = data.map(file => {
                 const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
-                return `<div class="file-item">
-                            📄 ${file.name}
-                            <button onclick="window.open('${url}', '_blank')">下载</button>
-                        </div>`;
+                const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
+                return `
+                    <div class="file-item">
+                        ${isImage ? `<img src="${url}" style="max-width:100px; max-height:100px; display:block; margin:0 auto;">` : '📄'}
+                        <strong>${file.name}</strong>
+                        <button onclick="window.open('${url}', '_blank')">查看/下载</button>
+                    </div>
+                `;
             }).join('');
         }
 
+        // 上传文件
         async function uploadFiles() {
             const files = document.getElementById('fileInput').files;
             if (!files.length) return;
             
             for (let file of files) {
                 const fileName = Date.now() + '_' + file.name;
-                await supabase.storage.from('files').upload(fileName, file);
+                const { error } = await supabase.storage.from('files').upload(fileName, file);
+                if (error) {
+                    alert('上传失败: ' + error.message);
+                }
             }
             await loadFiles();
             document.getElementById('fileInput').value = '';
