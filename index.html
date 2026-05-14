@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>私有文件存储</title>
+    <title>我的文件库</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
@@ -35,28 +35,38 @@ const SUPABASE_KEY = "sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// 加载文件
-loadFiles();
+// 加载文件（带5秒超时）
 async function loadFiles() {
     let dom = document.getElementById("fileList");
-    let { data, error } = await supabase.storage.from("files").list();
-    if (error) {
-        dom.innerHTML = "错误：" + error.message;
-        return;
+    dom.innerHTML = "加载中...";
+
+    try {
+        // 关键：给请求加个5秒超时，防止无限卡住
+        const { data, error } = await Promise.race([
+            supabase.storage.from("files").list(),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("请求超时")), 5000)
+            )
+        ]);
+
+        if (error) throw error;
+
+        let html = "";
+        data.forEach(f => {
+            let url = supabase.storage.from("files").getPublicUrl(f.name).data.publicUrl;
+            html += `
+            <div class="file-item">
+                <input type="checkbox" value="${f.name}"> ${f.name}
+                <div>
+                    <a href="${url}" target="_blank">打开</a> &nbsp;
+                    <button onclick="del('${f.name}')" style="padding:5px 8px;font-size:12px">删除</button>
+                </div>
+            </div>`;
+        });
+        dom.innerHTML = html;
+    } catch (err) {
+        dom.innerHTML = `加载失败：${err.message}`;
     }
-    let html = "";
-    data.forEach(f => {
-        let url = supabase.storage.from("files").getPublicUrl(f.name).data.publicUrl;
-        html += `
-        <div class="file-item">
-            <input type="checkbox" value="${f.name}"> ${f.name}
-            <div>
-                <a href="${url}" target="_blank">打开</a> &nbsp;
-                <button onclick="del('${f.name}')" style="padding:5px 8px;font-size:12px">删除</button>
-            </div>
-        </div>`;
-    });
-    dom.innerHTML = html;
 }
 
 // 上传
@@ -94,6 +104,9 @@ function batchDownload() {
         a.href = u; a.download = n; a.click();
     });
 }
+
+// 页面加载完成后执行
+loadFiles();
 </script>
 
 </body>
