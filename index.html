@@ -226,7 +226,6 @@
             window.selectCategory = function(el) {
                 document.querySelectorAll('.category-item').forEach(item => item.classList.remove('active'));
                 el.classList.add('active');
-                // 这里你可以后续扩展，给文件打分类标签，现在先做基础框架
             };
 
             // 加载文件列表
@@ -246,7 +245,7 @@
                 }
             }
 
-            // 渲染文件（搜索 + 视图）
+            // 渲染文件（支持模糊+精确搜索）
             function renderFiles() {
                 const container = document.getElementById('fileList');
                 let list = allFiles.filter(f => {
@@ -285,7 +284,7 @@
                 document.getElementById('fileList').innerHTML = html;
             }
 
-            // 网格模式（9宫格，带复选框和图片预览）
+            // 网格模式（9宫格，修复布局问题）
             function renderGrid(list) {
                 let html = '';
                 list.forEach(file => {
@@ -309,13 +308,13 @@
                 renderFiles();
             };
 
-            // 搜索（带按钮触发）
+            // 搜索（带按钮触发，支持模糊匹配）
             window.doSearch = function() {
                 searchKeyword = document.getElementById('search').value;
                 renderFiles();
             };
 
-            // 上传（支持多文件 + 文件夹，保留文件名，修复中文问题）
+            // 上传（支持文件夹层级、单张/多张图片，保留原文件名）
             document.getElementById('uploadBtn').onclick = async () => {
                 const input = document.getElementById('fileInput');
                 const files = input.files;
@@ -325,9 +324,11 @@
                 }
                 for (let i = 0; i < files.length; i++) {
                     const file = files[i];
-                    // 修复中文/特殊字符问题，保留原文件扩展名
-                    const safeName = file.name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9_\-.]/g, '_');
-                    await supabase.storage.from('files').upload(Date.now() + '_' + safeName, file);
+                    // 处理文件夹层级，保留相对路径
+                    const filePath = file.webkitRelativePath || file.name;
+                    // 修复中文/特殊字符问题，保留原文件路径和名称
+                    const safePath = filePath.replace(/[^\u4e00-\u9fa5a-zA-Z0-9_\-./]/g, '_');
+                    await supabase.storage.from('files').upload(safePath, file);
                 }
                 alert('上传完成！');
                 input.value = '';
