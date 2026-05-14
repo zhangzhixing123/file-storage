@@ -4,27 +4,38 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-    <h2>共享文件存储</h2>
+    <h2>共享文件存储 - 调试版</h2>
+    <p>请按 F12 打开控制台查看输出</p>
+    
     <input type="file" id="fileInput" multiple>
     <button id="uploadBtn">上传文件</button>
     <div id="fileList">加载中...</div>
 
     <script>
+        console.log('=== 脚本开始执行 ===');
+        
         const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
         
+        console.log('1. 配置已加载');
+        
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        console.log('2. Supabase 客户端创建成功');
         
         async function loadFiles() {
+            console.log('3. loadFiles 开始执行');
             const container = document.getElementById('fileList');
             container.innerHTML = '加载中...';
             
             const { data, error } = await supabase.storage.from('files').list();
             
             if (error) {
+                console.error('加载错误:', error);
                 container.innerHTML = '错误: ' + error.message;
                 return;
             }
+            
+            console.log('加载成功，文件数量:', data?.length);
             
             if (!data || data.length === 0) {
                 container.innerHTML = '暂无文件';
@@ -34,36 +45,48 @@
             let html = '';
             for (let file of data) {
                 const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
-                html += `<div>
-                            ${file.name} 
-                            <a href="${url}" target="_blank">查看/下载</a>
-                         </div>`;
+                html += `<div>${file.name} <a href="${url}" target="_blank">查看/下载</a></div>`;
             }
             container.innerHTML = html;
         }
         
-        document.getElementById('uploadBtn').onclick = async () => {
+        // 获取按钮元素
+        const uploadBtn = document.getElementById('uploadBtn');
+        console.log('4. 按钮元素:', uploadBtn);
+        
+        // 绑定点击事件
+        uploadBtn.onclick = function() {
+            console.log('5. 按钮被点击了！');
             const files = document.getElementById('fileInput').files;
+            console.log('6. 选择的文件数量:', files.length);
+            
             if (!files.length) {
                 alert('请先选择文件');
                 return;
             }
             
-            for (let file of files) {
-                const fileName = Date.now() + '_' + file.name;
-                const { error } = await supabase.storage.from('files').upload(fileName, file);
-                if (error) {
-                    alert('上传失败: ' + error.message);
-                    return;
+            (async () => {
+                for (let file of files) {
+                    const fileName = Date.now() + '_' + file.name;
+                    console.log('7. 正在上传:', fileName);
+                    const { error } = await supabase.storage.from('files').upload(fileName, file);
+                    if (error) {
+                        console.error('上传失败:', error);
+                        alert('上传失败: ' + error.message);
+                        return;
+                    }
+                    console.log('8. 上传成功:', fileName);
                 }
-            }
-            
-            alert('上传完成！');
-            document.getElementById('fileInput').value = '';
-            loadFiles();
+                alert('上传完成！');
+                document.getElementById('fileInput').value = '';
+                loadFiles();
+            })();
         };
         
+        console.log('9. 按钮事件绑定完成');
+        
         loadFiles();
+        console.log('10. 页面初始化完成');
     </script>
 </body>
 </html>
