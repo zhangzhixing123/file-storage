@@ -80,7 +80,8 @@
             border-radius: 6px;
             min-width: 220px;
         }
-        input#fileInput {padding: 5px;}
+        input.file-input {display: none;}
+        .btn-group {display: flex;gap:8px;}
         /* 列表样式 */
         .file-item {
             background: #fff;
@@ -134,8 +135,13 @@
         </div>
         <div class="content-area">
             <div class="tool-bar">
-                <input type="file" id="fileInput" multiple webkitdirectory directory>
-                <button id="uploadBtn">📤 上传文件/图片/文件夹</button>
+                <!-- 双按钮：分开 普通文件/文件夹 -->
+                <input type="file" id="fileInput" class="file-input" multiple>
+                <label for="fileInput"><button>📤 上传文件/图片</button></label>
+
+                <input type="file" id="folderInput" class="file-input" multiple webkitdirectory directory>
+                <label for="folderInput"><button>📁 上传整个文件夹</button></label>
+
                 <button class="warn" onclick="checkAll()">☑ 一键全选</button>
                 <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
                 <button id="batchDownload">📥 批量下载</button>
@@ -268,19 +274,30 @@
         renderFiles();
     }
 
-    // 上传 保留原文件夹路径、支持单图/多图/整文件夹
-    document.getElementById("uploadBtn").onclick = async function(){
-        let files = document.getElementById("fileInput").files;
-        if(!files.length) return alert("请选择图片/文件/整个文件夹");
+    // 上传通用逻辑（保留完整路径）
+    async function handleUpload(files){
+        if(!files.length) return;
         for(let file of files){
+            // 文件夹：webkitRelativePath；单文件：name
             let path = file.webkitRelativePath || file.name;
+            // 仅过滤非法字符，不破坏路径
             let safePath = path.replace(/[^\u4e00-\u9fa5a-zA-Z0-9_\-./]/g,"_");
             await supabase.storage.from("files").upload(safePath,file);
         }
-        alert("上传成功，已保留原文件夹结构！");
-        document.getElementById("fileInput").value = "";
+        alert("上传成功！");
         loadFiles();
     }
+
+    // 普通文件/图片上传
+    document.getElementById("fileInput").onchange = function(e){
+        handleUpload(e.target.files);
+        this.value = "";
+    };
+    // 文件夹上传
+    document.getElementById("folderInput").onchange = function(e){
+        handleUpload(e.target.files);
+        this.value = "";
+    };
 
     // 单删
     window.delOne = async function(name){
