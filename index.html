@@ -56,13 +56,17 @@
                 }
             }
             
-            // 上传文件
+            // 上传文件（已修复：文件名安全处理）
             async function uploadFiles(files) {
                 console.log('7. uploadFiles 开始，文件数量:', files.length);
                 
                 for (let i = 0; i < files.length; i++) {
                     const file = files[i];
-                    const fileName = Date.now() + '_' + file.name;
+                    
+                    // ✅ 修复：自动把中文/特殊字符变成合法文件名
+                    const safeName = file.name.replace(/[^a-zA-Z0-9_\-.]/g, '_');
+                    const fileName = Date.now() + '_' + safeName;
+                    
                     console.log(`8. 正在上传第 ${i+1} 个文件:`, fileName);
                     
                     const { error } = await supabase.storage.from('files').upload(fileName, file);
