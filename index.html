@@ -2,540 +2,185 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>共享文件存储</title>
+    <title>共享文件存储 - 认证版</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-            background: #f0f2f5;
-            min-height: 100vh;
-        }
-        
-        /* 登录页面 */
-        .login-container {
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-        }
-        .login-card {
-            background: white;
-            border-radius: 24px;
-            padding: 40px;
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-        }
-        .login-card h2 {
-            margin-bottom: 10px;
-            color: #333;
-        }
-        .login-card p {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 14px;
-        }
-        .login-card input {
-            width: 100%;
-            padding: 14px;
-            margin-bottom: 20px;
-            border: 1px solid #ddd;
-            border-radius: 12px;
-            font-size: 16px;
-        }
-        .login-card button {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            border-radius: 12px;
-            font-size: 16px;
-            cursor: pointer;
-        }
-        .error {
-            color: #ff5252;
-            margin-top: 12px;
-            font-size: 14px;
-        }
-        
-        /* 主应用页面 */
-        .app-container {
-            display: none;
-            min-height: 100vh;
-        }
-        .header {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            padding: 16px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .header h2 {
-            font-size: 1.2rem;
-        }
-        .logout-btn {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-        }
-        
-        /* 工具栏 */
-        .toolbar {
-            background: white;
-            padding: 16px 20px;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-        .search-box {
-            flex: 1;
-            max-width: 300px;
-        }
-        .search-box input {
-            width: 100%;
-            padding: 10px 16px;
-            border: 1px solid #ddd;
-            border-radius: 30px;
-            font-size: 14px;
-            outline: none;
-        }
-        .category-tabs {
-            display: flex;
-            gap: 8px;
-        }
-        .category-btn {
-            background: #f0f0f0;
-            border: none;
-            padding: 8px 20px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .category-btn.active {
-            background: #667eea;
-            color: white;
-        }
-        
-        /* 上传区域 */
-        .upload-area {
-            background: white;
-            padding: 20px;
-            margin: 20px;
-            border-radius: 16px;
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        .upload-area input {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-        }
-        .upload-area button {
-            background: #4caf50;
-            color: white;
-            border: none;
-            padding: 10px 24px;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-        
-        /* 文件网格 */
-        .file-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-            gap: 16px;
-            padding: 20px;
-        }
-        .file-card {
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        .file-card:hover {
-            transform: translateY(-4px);
-        }
-        .file-preview {
-            width: 100%;
-            height: 140px;
-            background: #f8f9fa;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 48px;
-        }
-        .file-preview img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .file-info {
-            padding: 12px;
-        }
-        .file-name {
-            font-size: 13px;
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .file-meta {
-            font-size: 11px;
-            color: #999;
-            margin-top: 4px;
-        }
-        
-        .no-results {
-            text-align: center;
-            padding: 60px;
-            color: #999;
-        }
-        .loading {
-            text-align: center;
-            padding: 60px;
-            color: #999;
-        }
-        
-        /* 文件列表视图 */
-        .list-view {
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .list-item {
-            background: white;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            padding: 12px 16px;
-            cursor: pointer;
-        }
-        .list-item:hover {
-            background: #f8f9ff;
-        }
-        .list-icon {
-            font-size: 28px;
-        }
-        .list-info {
-            flex: 1;
-        }
-        .list-name {
-            font-weight: 500;
-        }
-        .list-meta {
-            font-size: 12px;
-            color: #999;
-        }
-        
-        .fab {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            width: 56px;
-            height: 56px;
-            border-radius: 28px;
-            background: #667eea;
-            color: white;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            display: none;
-        }
-        
-        .view-toggle {
-            display: flex;
-            gap: 8px;
-        }
-        .view-btn {
-            background: #f0f0f0;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 12px;
-        }
-        .view-btn.active {
-            background: #667eea;
-            color: white;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui; background: #667eea; min-height: 100vh; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .card { background: white; border-radius: 16px; padding: 30px; margin-bottom: 20px; }
+        .login-card { max-width: 400px; margin: 100px auto; text-align: center; }
+        input, button { padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #ddd; }
+        button { background: #667eea; color: white; cursor: pointer; border: none; }
+        .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 16px; }
+        .file-card { background: white; border-radius: 12px; padding: 12px; cursor: pointer; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .file-card img { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; }
+        .toolbar { display: flex; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+        .search-box input { width: 250px; }
+        .category-tabs { display: flex; gap: 8px; }
+        .tab { padding: 6px 16px; background: #e0e0e0; border-radius: 20px; cursor: pointer; }
+        .tab.active { background: #667eea; color: white; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .logout-btn { background: #ff5252; }
+        .loading { text-align: center; padding: 40px; color: #666; }
     </style>
 </head>
 <body>
+    <div class="container" id="app"></div>
 
-<!-- 登录页面 -->
-<div id="loginContainer" class="login-container">
-    <div class="login-card">
-        <h2>📁 共享文件存储</h2>
-        <p>请输入密码</p>
-        <input type="password" id="password" placeholder="密码">
-        <button id="loginBtn">登录</button>
-        <div id="errorMsg" class="error"></div>
-    </div>
-</div>
-
-<!-- 主应用页面 -->
-<div id="appContainer" class="app-container">
-    <div class="header">
-        <h2>📁 共享文件存储</h2>
-        <div style="display: flex; gap: 12px;">
-            <div class="view-toggle">
-                <button id="gridViewBtn" class="view-btn active" onclick="setView('grid')">网格</button>
-                <button id="listViewBtn" class="view-btn" onclick="setView('list')">列表</button>
-            </div>
-            <button id="logoutBtn" class="logout-btn">退出</button>
-        </div>
-    </div>
-    
-    <div class="toolbar">
-        <div class="search-box">
-            <input type="text" id="searchInput" placeholder="🔍 搜索文件名..." oninput="filterFiles()">
-        </div>
-        <div class="category-tabs">
-            <button class="category-btn active" data-cat="all" onclick="setCategory('all')">全部</button>
-            <button class="category-btn" data-cat="image" onclick="setCategory('image')">图片</button>
-            <button class="category-btn" data-cat="document" onclick="setCategory('document')">文档</button>
-            <button class="category-btn" data-cat="other" onclick="setCategory('other')">其他</button>
-        </div>
-    </div>
-    
-    <div class="upload-area">
-        <input type="file" id="fileInput" multiple>
-        <button id="uploadBtn">📤 上传文件</button>
-    </div>
-    
-    <div id="fileContainer" class="file-grid">
-        <div class="loading">加载中...</div>
-    </div>
-</div>
-
-<script>
-    // ========== 配置 ==========
-    const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
-    const PASSWORD = '123456';
-    
-    let supabase;
-    let allFiles = [];
-    let filteredFiles = [];
-    let currentCategory = 'all';
-    let currentSearchTerm = '';
-    let currentView = 'grid';
-    
-    // 判断文件类型
-    function getFileType(fileName) {
-        const ext = fileName.split('.').pop().toLowerCase();
-        const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
-        const docExts = ['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx', 'ppt', 'pptx'];
+    <script>
+        const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         
-        if (imageExts.includes(ext)) return 'image';
-        if (docExts.includes(ext)) return 'document';
-        return 'other';
-    }
-    
-    // 格式化文件大小
-    function formatSize(bytes) {
-        if (!bytes) return '? KB';
-        if (bytes < 1024) return bytes + ' B';
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-    }
-    
-    // 格式化日期
-    function formatDate(dateStr) {
-        const date = new Date(dateStr);
-        const now = new Date();
-        const diff = now - date;
-        if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
-        if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
-        return date.getMonth() + 1 + '/' + date.getDate();
-    }
-    
-    // 过滤文件
-    function filterFiles() {
-        let result = [...allFiles];
+        let currentUser = null;
+        let allFiles = [];
+        let currentCategory = 'all';
+        let currentSearch = '';
         
-        // 按分类过滤
-        if (currentCategory !== 'all') {
-            result = result.filter(file => getFileType(file.name) === currentCategory);
+        // 判断文件类型
+        function getFileType(fileName) {
+            const ext = fileName.split('.').pop().toLowerCase();
+            if (['jpg','jpeg','png','gif','webp'].includes(ext)) return 'image';
+            if (['pdf','doc','docx','txt','xls','xlsx'].includes(ext)) return 'document';
+            return 'other';
         }
         
-        // 按搜索词过滤
-        if (currentSearchTerm) {
-            result = result.filter(file => 
-                file.name.toLowerCase().includes(currentSearchTerm.toLowerCase())
-            );
+        // 渲染登录页面
+        function renderLogin() {
+            document.getElementById('app').innerHTML = `
+                <div class="login-card card">
+                    <h2>📁 共享文件存储</h2>
+                    <p>使用邮箱注册/登录</p>
+                    <input type="email" id="email" placeholder="邮箱">
+                    <input type="password" id="password" placeholder="密码（至少6位）">
+                    <button onclick="signUp()">注册</button>
+                    <button onclick="signIn()" style="margin-top:8px;">登录</button>
+                    <div id="authMsg" style="color:red; margin-top:12px;"></div>
+                </div>
+            `;
         }
         
-        filteredFiles = result;
-        renderFiles();
-    }
-    
-    // 设置分类
-    function setCategory(category) {
-        currentCategory = category;
-        document.querySelectorAll('.category-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.cat === category);
-        });
-        filterFiles();
-    }
-    
-    // 设置视图
-    function setView(view) {
-        currentView = view;
-        document.getElementById('gridViewBtn').classList.toggle('active', view === 'grid');
-        document.getElementById('listViewBtn').classList.toggle('active', view === 'list');
-        renderFiles();
-    }
-    
-    // 搜索输入
-    window.filterFiles = filterFiles;
-    window.setCategory = setCategory;
-    window.setView = setView;
-    
-    // 渲染文件列表
-    function renderFiles() {
-        const container = document.getElementById('fileContainer');
-        
-        if (filteredFiles.length === 0) {
-            container.innerHTML = '<div class="no-results">📭 没有找到文件</div>';
-            return;
-        }
-        
-        if (currentView === 'grid') {
-            container.className = 'file-grid';
-            container.innerHTML = filteredFiles.map(file => {
-                const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
-                const isImage = getFileType(file.name) === 'image';
-                const icon = isImage ? '' : (getFileType(file.name) === 'document' ? '📄' : '📁');
-                return `
-                    <div class="file-card" onclick="window.open('${url}', '_blank')">
-                        <div class="file-preview">
-                            ${isImage ? `<img src="${url}" onerror="this.parentElement.innerHTML='🖼️'">` : `<span style="font-size:48px;">${icon}</span>`}
+        // 渲染主界面
+        async function renderMain() {
+            await loadFiles();
+            
+            const categories = ['all', 'image', 'document', 'other'];
+            const categoryNames = { all: '全部', image: '图片', document: '文档', other: '其他' };
+            
+            let filtered = [...allFiles];
+            if (currentCategory !== 'all') {
+                filtered = filtered.filter(f => getFileType(f.name) === currentCategory);
+            }
+            if (currentSearch) {
+                filtered = filtered.filter(f => f.name.toLowerCase().includes(currentSearch.toLowerCase()));
+            }
+            
+            let filesHtml = '';
+            if (filtered.length === 0) {
+                filesHtml = '<div class="loading">暂无文件，请上传</div>';
+            } else {
+                filesHtml = '<div class="file-grid">' + filtered.map(file => {
+                    const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
+                    const isImage = getFileType(file.name) === 'image';
+                    return `
+                        <div class="file-card" onclick="window.open('${url}','_blank')">
+                            ${isImage ? `<img src="${url}" onerror="this.src='https://placehold.co/150x150?text=Image'">` : '<div style="font-size:48px; padding:30px;">📄</div>'}
+                            <div>${file.name.length > 20 ? file.name.slice(0,17)+'...' : file.name}</div>
                         </div>
-                        <div class="file-info">
-                            <div class="file-name" title="${file.name}">${file.name.length > 25 ? file.name.slice(0,22)+'...' : file.name}</div>
-                            <div class="file-meta">${formatSize(file.metadata?.size)} · ${formatDate(file.created_at)}</div>
+                    `;
+                }).join('') + '</div>';
+            }
+            
+            document.getElementById('app').innerHTML = `
+                <div class="card">
+                    <div class="header">
+                        <h2>📁 共享文件存储</h2>
+                        <div>
+                            <span style="margin-right:16px;">${currentUser?.email}</span>
+                            <button class="logout-btn" onclick="signOut()">退出</button>
                         </div>
                     </div>
-                `;
-            }).join('');
-        } else {
-            container.className = 'list-view';
-            container.innerHTML = filteredFiles.map(file => {
-                const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
-                const icon = getFileType(file.name) === 'image' ? '🖼️' : (getFileType(file.name) === 'document' ? '📄' : '📁');
-                return `
-                    <div class="list-item" onclick="window.open('${url}', '_blank')">
-                        <div class="list-icon">${icon}</div>
-                        <div class="list-info">
-                            <div class="list-name">${file.name}</div>
-                            <div class="list-meta">${formatSize(file.metadata?.size)} · ${formatDate(file.created_at)}</div>
+                    
+                    <div class="toolbar">
+                        <div class="search-box">
+                            <input type="text" id="searchInput" placeholder="🔍 搜索文件名..." oninput="searchFiles(this.value)">
+                        </div>
+                        <div class="category-tabs">
+                            ${categories.map(cat => `<div class="tab ${currentCategory === cat ? 'active' : ''}" onclick="setCategory('${cat}')">${categoryNames[cat]}</div>`).join('')}
                         </div>
                     </div>
-                `;
-            }).join('');
-        }
-    }
-    
-    // 加载文件列表
-    async function loadFiles() {
-        const container = document.getElementById('fileContainer');
-        container.innerHTML = '<div class="loading">加载中...</div>';
-        
-        const { data, error } = await supabase.storage.from('files').list();
-        
-        if (error) {
-            container.innerHTML = '<div class="loading">加载失败: ' + error.message + '</div>';
-            return;
+                    
+                    <div class="upload-area" style="margin-bottom:20px;">
+                        <input type="file" id="fileInput" multiple>
+                        <button onclick="uploadFiles()">📤 上传文件</button>
+                    </div>
+                    
+                    ${filesHtml}
+                </div>
+            `;
         }
         
-        allFiles = data || [];
-        filterFiles();
-    }
-    
-    // 上传文件
-    async function uploadFiles() {
-        const input = document.getElementById('fileInput');
-        const files = input.files;
-        
-        if (!files.length) {
-            alert('请先选择文件');
-            return;
+        async function loadFiles() {
+            if (!currentUser) return;
+            const { data, error } = await supabase.storage.from('files').list();
+            if (!error) allFiles = data || [];
         }
         
-        for (let file of files) {
-            const fileName = Date.now() + '_' + file.name;
-            const { error } = await supabase.storage.from('files').upload(fileName, file);
-            if (error) {
-                alert('上传失败: ' + error.message);
-                return;
+        async function uploadFiles() {
+            const input = document.getElementById('fileInput');
+            const files = input.files;
+            if (!files.length) { alert('请选择文件'); return; }
+            
+            for (let file of files) {
+                const fileName = Date.now() + '_' + file.name;
+                await supabase.storage.from('files').upload(fileName, file);
+            }
+            alert('上传完成！');
+            input.value = '';
+            renderMain();
+        }
+        
+        window.searchFiles = (val) => { currentSearch = val; renderMain(); };
+        window.setCategory = (cat) => { currentCategory = cat; renderMain(); };
+        
+        async function signUp() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const { error } = await supabase.auth.signUp({ email, password });
+            if (error) document.getElementById('authMsg').innerText = error.message;
+            else document.getElementById('authMsg').innerText = '注册成功！请登录';
+        }
+        
+        async function signIn() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) document.getElementById('authMsg').innerText = error.message;
+            else {
+                currentUser = data.user;
+                renderMain();
             }
         }
         
-        alert('上传完成！');
-        input.value = '';
-        await loadFiles();
-    }
-    
-    // 登录
-    function login() {
-        const pwd = document.getElementById('password').value;
-        if (pwd !== PASSWORD) {
-            document.getElementById('errorMsg').innerText = '密码错误';
-            return;
-        }
+        window.signUp = signUp;
+        window.signIn = signIn;
+        window.signOut = async () => {
+            await supabase.auth.signOut();
+            currentUser = null;
+            renderLogin();
+        };
+        window.uploadFiles = uploadFiles;
         
-        document.getElementById('errorMsg').innerText = '';
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        
-        document.getElementById('loginContainer').style.display = 'none';
-        document.getElementById('appContainer').style.display = 'block';
-        
-        loadFiles();
-    }
-    
-    // 退出
-    function logout() {
-        document.getElementById('appContainer').style.display = 'none';
-        document.getElementById('loginContainer').style.display = 'flex';
-        document.getElementById('password').value = '';
-    }
-    
-    // 绑定事件
-    document.getElementById('loginBtn').onclick = login;
-    document.getElementById('logoutBtn').onclick = logout;
-    document.getElementById('uploadBtn').onclick = uploadFiles;
-    
-    // 回车登录
-    document.getElementById('password').onkeypress = (e) => {
-        if (e.key === 'Enter') login();
-    };
-</script>
+        // 检查当前登录状态
+        supabase.auth.getSession().then(({ data }) => {
+            if (data.session) {
+                currentUser = data.session.user;
+                renderMain();
+            } else {
+                renderLogin();
+            }
+        });
+    </script>
 </body>
 </html>
