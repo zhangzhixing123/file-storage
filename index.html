@@ -6,13 +6,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {font-family: Arial, sans-serif;padding: 20px;background: #f6f7f9;}
-        .main-container {display: flex;gap: 20px;}
-        .category-sidebar {width: 200px;background: #fff;padding: 15px;border-radius: 8px;box-shadow: 0 2px 8px rgba(0,0,0,0.05);}
-        .category-sidebar h3 {margin-top: 0;font-size: 16px;}
-        .category-item {padding: 8px 10px;margin: 5px 0;background: #f0f2f5;border-radius: 6px;cursor: pointer;font-size: 14px;}
-        .category-item.active {background: #409eff;color: #fff;}
-        .add-category-btn {margin-top: 10px;width: 100%;padding: 6px;background: #67c23a;color: #fff;border: none;border-radius: 6px;cursor: pointer;}
-        .content-area {flex: 1;}
+        .main-container {display: block;gap: 20px;}
+        .content-area {width: 100%;}
         .storage-box {background:#fff;padding:15px;border-radius:8px;margin-bottom:15px;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
         .storage-line {display:flex;align-items:center;gap:10px;margin:8px 0;flex-wrap:wrap;}
         .storage-line input {width:80px;padding:4px;border:1px solid #ccc;border-radius:4px;}
@@ -37,19 +32,12 @@
         .view-mode button.active {background:#409eff;color:#fff;}
         a.btn-sm {padding:3px 6px;border-radius:4px;text-decoration:none;font-size:12px;color:#fff;}
         .auto-del-box{background:#fff;padding:12px;border-radius:8px;margin:15px 0;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
-        .auto-del-select, .upload-select{padding:6px;border-radius:4px;border:1px solid #ccc;margin-right:8px;}
+        .auto-del-select{padding:6px;border-radius:4px;border:1px solid #ccc;margin-right:8px;}
     </style>
 </head>
 <body>
     <h2>📁 文件存储管理系统</h2>
     <div class="main-container">
-        <div class="category-sidebar">
-            <h3>自定义项目分类</h3>
-            <div id="categoryList">
-                <div class="category-item active" data-cat="全部文件">全部文件</div>
-            </div>
-            <button class="add-category-btn" onclick="addCategory()">+ 新建分类命名</button>
-        </div>
         <div class="content-area">
             <div class="storage-box">
                 <div class="storage-line">
@@ -79,7 +67,6 @@
             </div>
 
             <div class="tool-bar">
-                <select class="upload-select" id="uploadCat"></select>
                 <button onclick="triggerFileUpload()">🖼️ 上传文件/图片</button>
                 <button class="warn" onclick="checkAll()">☑ 一键全选</button>
                 <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
@@ -121,7 +108,6 @@
     let searchTxt = '';
     let dateStart = '';
     let dateEnd = '';
-    let currentCat = '全部文件';
     let totalStorageGB = parseFloat(localStorage.getItem('totalStorageGB')) || 1;
     let autoDelDay = parseInt(localStorage.getItem('autoDelDay')) || 0;
 
@@ -178,14 +164,12 @@
     async function autoCleanWhenFull(totalBytes){
         const total = totalStorageGB * 1024*1024*1024;
         const pct = total > 0 ? (totalBytes / total * 100) : 0;
-
         if(pct >= 99.9){
             let sorted = [...allFiles].sort((a,b)=> new Date(a.created_at||0) - new Date(b.created_at||0));
             let delCount = Math.ceil(sorted.length * 0.1);
             if(delCount <1) delCount=1;
             let delList = sorted.slice(0,delCount).map(i=>i.name);
             await sb.storage.from("files").remove(delList);
-            console.log("空间满自动清理 oldest 10%:",delList);
             return true;
         }
         return false;
@@ -193,7 +177,7 @@
 
     window.saveStorage = function(){
         let v = parseFloat(document.getElementById('totalGB').value);
-        if(isNaN(v)||v<=0){alert("有效数字");return;}
+        if(isNaN(v)||v<=0){alert("请输入有效容量");return;}
         totalStorageGB = v;
         localStorage.setItem('totalStorageGB',v);
         loadFiles();
@@ -206,51 +190,16 @@
         let max = (totalStorageGB*1024).toFixed(2);
         document.getElementById('storageProgress').style.width = pct+'%';
         document.getElementById('storageText').innerText =
-        `全部文件总大小：${used} MB / 总容量：${max} MB  占比：${pct}%`;
-    }
-
-    function getCategories(){
-        return JSON.parse(localStorage.getItem('categories')||'["全部文件"]');
-    }
-
-    function saveCategories(arr){
-        localStorage.setItem('categories',JSON.stringify(arr));
-    }
-
-    function renderCate(){
-        let cats = getCategories();
-        let h = "";
-        cats.forEach((v)=>{
-            let active = v===currentCat ? 'active' : '';
-            h+=`<div class="category-item ${active}" data-cat="${v}" onclick="selectCategory('${v}')">${v}</div>`;
-        });
-        document.getElementById("categoryList").innerHTML = h;
-
-        let sel = document.getElementById("uploadCat");
-        sel.innerHTML = cats.filter(x=>x!=='全部文件').map(v=>`<option value="${v}">${v}</option>`).join('');
-    }
-
-    window.addCategory=()=>{
-        let n=prompt("分类名");if(!n)return;
-        let cats = getCategories();
-        if(cats.includes(n)){alert("分类已存在");return;}
-        cats.push(n);
-        saveCategories(cats);
-        renderCate();
-    }
-
-    window.selectCategory=(name)=>{
-        currentCat = name;
-        renderCate();
-        renderFiles();
+        `全部文件总大小：${used} MB / 总容量：${max} MB  占用占比：${pct}%`;
     }
 
     window.checkAll=()=>document.querySelectorAll(".file-chk").forEach(x=>x.checked=true);
     window.unCheckAll=()=>document.querySelectorAll(".file-chk").forEach(x=>x.checked=false);
 
-    window.changeView=(t)=>{viewType=t;
+    window.changeView=(t)=>{
+        viewType=t;
         document.querySelectorAll(".view-mode button").forEach(x=>x.classList.remove("active"));
-        document.getElementById(t=='list'?'listBtn':'gridBtn').classList.add("active");
+        document.getElementById(t==='list'?'listBtn':'gridBtn').classList.add("active");
         renderFiles();
     }
 
@@ -271,7 +220,7 @@
         let box=document.getElementById("fileBox");
         box.innerHTML="加载中...";
         let {data,error}=await sb.storage.from("files").list();
-        if(error){box.innerHTML="失败："+error.message;return;}
+        if(error){box.innerHTML="加载失败："+error.message;return;}
         allFiles=data||[];
         let total=0;
         allFiles.forEach(i=>total+=i.metadata?.size||0);
@@ -290,20 +239,15 @@
                 if(dateStart && d<dateStart) dateOk=false;
                 if(dateEnd && d>dateEnd) dateOk=false;
             }
-            let catOk = true;
-            if(currentCat !== '全部文件'){
-                catOk = f.name.startsWith(`[${currentCat}]`);
-            }
-            return nameOk && dateOk && catOk;
+            return nameOk && dateOk;
         });
 
         let box=document.getElementById("fileBox");
         if(list.length===0){box.innerHTML="无匹配文件";return;}
 
-        if(viewType=='list'){
+        if(viewType==='list'){
             let h="";
             list.forEach(f=>{
-                let displayName = f.name.replace(/^\[.*?\]/,'');
                 let url=sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
                 let size=formatSize(f.metadata?.size);
                 let time=formatTime(f.created_at||f.updated_at);
@@ -311,8 +255,8 @@
                 <div class="file-item">
                     <input type="checkbox" class="file-chk" value="${f.name}">
                     <div class="file-info">
-                        <div>${displayName}</div>
-                        <div class="file-size-text">大小：${size}</div>
+                        <div>${f.name}</div>
+                        <div class="file-size-text">文件大小：${size}</div>
                         <div class="file-time-text">上传时间：${time}</div>
                     </div>
                     <div>
@@ -326,7 +270,6 @@
         }else{
             let h='<div class="file-grid">';
             list.forEach(f=>{
-                let displayName = f.name.replace(/^\[.*?\]/,'');
                 let url=sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
                 let isImg=/\.(jpg|jpeg|png|gif|webp)$/i.test(f.name);
                 let size=formatSize(f.metadata?.size);
@@ -335,7 +278,7 @@
                 <div class="grid-item">
                     <input type="checkbox" class="file-chk" value="${f.name}">
                     ${isImg?`<img src="${url}">`:`<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
-                    <div class="name">${displayName}</div>
+                    <div class="name">${f.name}</div>
                     <div style="font-size:12px;color:#666">${size}</div>
                     <div style="font-size:11px;color:#999">${time}</div>
                     <div style="margin-top:6px;display:flex;gap:4px;justify-content:center;">
@@ -352,14 +295,8 @@
 
     document.getElementById("fileInput").onchange=async e=>{
         let fs=e.target.files;
-        let cat = document.getElementById("uploadCat").value;
-        if(!cat){
-            alert("请先创建分类");
-            return;
-        }
         for(let f of fs){
-            let newName = `[${cat}]${f.name}`;
-            let safe=newName.replace(/[^\w\u4e00-\u9fa5.\-]/g,'_');
+            let safe=f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g,'_');
             await sb.storage.from("files").upload(safe,f);
         }
         alert("上传成功");
@@ -368,29 +305,28 @@
     }
 
     window.delOne=async (name)=>{
-        if(!confirm("确定删除？"))return;
+        if(!confirm("确定删除该文件？"))return;
         await sb.storage.from("files").remove([name]);
         loadFiles();
     }
 
     document.getElementById("batchDelete").onclick=async ()=>{
         let arr=Array.from(document.querySelectorAll(".file-chk:checked")).map(x=>x.value);
-        if(arr.length===0){alert("请勾选");return;}
-        if(!confirm(`删除${arr.length}个？`))return;
+        if(arr.length===0){alert("请先勾选文件");return;}
+        if(!confirm(`确定批量删除选中${arr.length}个文件？`))return;
         await sb.storage.from("files").remove(arr);
         loadFiles();
     }
 
     document.getElementById("batchDownload").onclick=()=>{
         let arr=Array.from(document.querySelectorAll(".file-chk:checked")).map(x=>x.value);
-        if(arr.length===0){alert("请勾选");return;}
+        if(arr.length===0){alert("请先勾选文件");return;}
         arr.forEach(n=>{
             let url=sb.storage.from("files").getPublicUrl(n).data.publicUrl;
             let a=document.createElement("a");a.href=url;a.download=n;a.click();
         });
     }
 
-    renderCate();
     loadFiles();
 })();
 </script>
