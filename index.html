@@ -5,117 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            background: #f6f7f9;
-        }
-        .main-container {
-            display: flex;
-            gap: 20px;
-        }
-        /* 左侧分类 */
-        .category-sidebar {
-            width: 200px;
-            background: #fff;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-        .category-sidebar h3 {
-            margin-top: 0;
-            font-size: 16px;
-        }
-        .category-item {
-            padding: 8px 10px;
-            margin: 5px 0;
-            background: #f0f2f5;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .category-item.active {
-            background: #409eff;
-            color: #fff;
-        }
-        .add-category-btn {
-            margin-top: 10px;
-            width: 100%;
-            padding: 6px;
-            background: #67c23a;
-            color: #fff;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-        /* 主内容区 */
-        .content-area {
-            flex: 1;
-        }
-        .tool-bar {
-            margin: 15px 0;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-        button {
-            padding: 8px 14px;
-            border: none;
-            border-radius: 6px;
-            background: #409eff;
-            color: #fff;
-            cursor: pointer;
-        }
+        body {font-family: Arial, sans-serif;padding: 20px;background: #f6f7f9;}
+        .main-container {display: flex;gap: 20px;}
+        .category-sidebar {width: 200px;background: #fff;padding: 15px;border-radius: 8px;box-shadow: 0 2px 8px rgba(0,0,0,0.05);}
+        .category-sidebar h3 {margin-top: 0;font-size: 16px;}
+        .category-item {padding: 8px 10px;margin: 5px 0;background: #f0f2f5;border-radius: 6px;cursor: pointer;font-size: 14px;}
+        .category-item.active {background: #409eff;color: #fff;}
+        .add-category-btn {margin-top: 10px;width: 100%;padding: 6px;background: #67c23a;color: #fff;border: none;border-radius: 6px;cursor: pointer;}
+        .content-area {flex: 1;}
+        .tool-bar {margin: 15px 0;display: flex;gap: 10px;flex-wrap: wrap;align-items: center;}
+        button {padding: 8px 14px;border: none;border-radius: 6px;background: #409eff;color: #fff;cursor: pointer;}
         button.danger {background: #f56c6c;}
-        button.success {background: #67c23a;}
         button.warn {background: #e6a23c;}
-        .search-wrap {
-            display: flex;
-            gap: 5px;
-        }
-        input.search {
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            min-width: 220px;
-        }
-        /* 列表样式 */
-        .file-item {
-            background: #fff;
-            padding: 10px 12px;
-            margin: 6px 0;
-            border-radius: 8px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+        .search-wrap {display: flex;gap: 5px;}
+        input.search {padding: 8px 12px;border: 1px solid #ddd;border-radius: 6px;min-width: 220px;}
+        .file-item {background: #fff;padding: 10px 12px;margin: 6px 0;border-radius: 8px;display: flex;justify-content: space-between;align-items: center;}
         .file-item .name {margin-left:10px;flex:1;}
-        /* 九宫格3列固定 */
-        .file-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-            margin-top:15px;
-        }
-        .grid-item {
-            background: #fff;
-            padding:12px;
-            border-radius:10px;
-            text-align:center;
-            box-shadow:0 2px 8px rgba(0,0,0,0.05);
-        }
-        .grid-item img {
-            width:100%;
-            height:120px;
-            object-fit:cover;
-            border-radius:6px;
-        }
-        .grid-item .name {
-            margin-top:8px;
-            font-size:13px;
-            word-break:break-all;
-        }
+        .file-grid {display: grid;grid-template-columns: repeat(3,1fr);gap:15px;margin-top:15px;}
+        .grid-item {background:#fff;padding:12px;border-radius:10px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
+        .grid-item img {width:100%;height:120px;object-fit:cover;border-radius:6px;}
+        .grid-item .name {margin-top:8px;font-size:13px;word-break:break-all;}
         .view-mode {display:flex;gap:6px;}
         .view-mode button {background:#eee;color:#333;}
         .view-mode button.active {background:#409eff;color:#fff;}
@@ -137,23 +46,23 @@
         </div>
         <div class="content-area">
             <div class="tool-bar">
-                <button onclick="triggerFileUpload()">📤 上传文件/图片</button>
-                <button onclick="triggerFolderUpload()">📁 上传整个文件夹</button>
+                <button onclick="triggerFileUpload()">🖼️ 上传单张/多张图片</button>
+                <button onclick="triggerFolderUpload()">📂 上传整个文件夹</button>
                 <button class="warn" onclick="checkAll()">☑ 一键全选</button>
                 <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
                 <button id="batchDownload">📥 批量下载</button>
                 <button id="batchDelete" class="danger">🗑️ 批量删除</button>
                 <div class="search-wrap">
-                    <input class="search" id="search" placeholder="模糊/精确搜索文件名">
+                    <input class="search" id="search" placeholder="文件名模糊搜索">
                     <button onclick="doSearch()">搜索</button>
                 </div>
                 <div class="view-mode">
-                    <button id="viewList" class="active" onclick="switchView('list')">列表模式</button>
-                    <button id="viewGrid" onclick="switchView('grid')">九宫格模式</button>
+                    <button id="listBtn" class="active" onclick="changeView('list')">列表模式</button>
+                    <button id="gridBtn" onclick="changeView('grid')">九宫格模式</button>
                 </div>
             </div>
             <hr>
-            <div id="fileList">正在加载文件列表...</div>
+            <div id="fileBox">加载中...</div>
         </div>
     </div>
 
@@ -165,11 +74,11 @@
 (function() {
     const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     let allFiles = [];
-    let currentView = 'list';
-    let searchKeyword = '';
+    let viewType = 'list';
+    let searchTxt = '';
 
     // 渲染分类
     function renderCate(){
@@ -191,148 +100,134 @@
         el.classList.add("active");
     }
 
-    // 一键全选
-    window.checkAll = function(){
-        document.querySelectorAll(".file-check").forEach(cb=>cb.checked=true);
-    }
-    // 取消全选
-    window.unCheckAll = function(){
-        document.querySelectorAll(".file-check").forEach(cb=>cb.checked=false);
-    }
-
-    // 加载文件
-    async function loadFiles(){
-        let box = document.getElementById("fileList");
-        box.innerHTML = "加载中...";
-        let {data,error} = await supabase.storage.from("files").list();
-        if(error){
-            box.innerHTML = "加载失败："+error.message;
-            return;
-        }
-        allFiles = data||[];
-        renderFiles();
-    }
-
-    // 筛选搜索
-    function renderFiles(){
-        let list = allFiles.filter(item=>{
-            return item.name.toLowerCase().includes(searchKeyword.toLowerCase());
-        });
-        if(!list.length){
-            document.getElementById("fileList").innerHTML = "暂无匹配文件";
-            return;
-        }
-        currentView==="list" ? renderList(list) : renderGrid(list);
-    }
-
-    // 列表渲染
-    function renderList(list){
-        let html = "";
-        list.forEach(file=>{
-            let url = supabase.storage.from("files").getPublicUrl(file.name).data.publicUrl;
-            html += `
-            <div class="file-item">
-                <input type="checkbox" class="file-check" value="${file.name}">
-                <span class="name">${file.name}</span>
-                <div>
-                    <a href="${url}" target="_blank">打开预览</a>
-                    <button onclick="delOne('${file.name}')" style="margin-left:8px;padding:3px 8px;font-size:12px;background:#f56c6c;color:#fff;border:none;border-radius:4px">删除</button>
-                </div>
-            </div>`
-        })
-        document.getElementById("fileList").innerHTML = html;
-    }
-
-    // 九宫格渲染
-    function renderGrid(list){
-        let html = "";
-        list.forEach(file=>{
-            let url = supabase.storage.from("files").getPublicUrl(file.name).data.publicUrl;
-            let isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
-            html += `
-            <div class="grid-item">
-                <input type="checkbox" class="file-check" value="${file.name}">
-                ${isImg ? `<img src="${url}" alt="">` : `<div style="height:120px;line-height:120px;font-size:40px">📁</div>`}
-                <div class="name">${file.name}</div>
-            </div>`
-        })
-        document.getElementById("fileList").innerHTML = html;
-    }
+    // 一键全选/取消全选
+    window.checkAll = () => document.querySelectorAll(".file-chk").forEach(x=>x.checked=true);
+    window.unCheckAll = () => document.querySelectorAll(".file-chk").forEach(x=>x.checked=false);
 
     // 切换视图
-    window.switchView = function(mode){
-        currentView = mode;
-        document.querySelectorAll(".view-mode button").forEach(b=>b.classList.remove("active"));
-        document.getElementById("view"+mode.charAt(0).toUpperCase()+mode.slice(1)).classList.add("active");
+    window.changeView = t => {
+        viewType = t;
+        document.querySelectorAll(".view-mode button").forEach(x=>x.classList.remove("active"));
+        document.getElementById(t === 'list' ? 'listBtn' : 'gridBtn').classList.add("active");
         renderFiles();
     }
 
     // 搜索
-    window.doSearch = function(){
-        searchKeyword = document.getElementById("search").value.trim();
+    window.doSearch = () => {
+        searchTxt = document.getElementById("search").value.trim().toLowerCase();
         renderFiles();
     }
 
-    // 用JS直接触发文件选择
-    window.triggerFileUpload = function(){
-        document.getElementById("fileInput").click();
-    }
-    window.triggerFolderUpload = function(){
-        document.getElementById("folderInput").click();
+    // 触发文件选择
+    window.triggerFileUpload = () => document.getElementById("fileInput").click();
+    window.triggerFolderUpload = () => document.getElementById("folderInput").click();
+
+    // 加载文件列表
+    async function loadFiles(){
+        let box = document.getElementById("fileBox");
+        box.innerHTML = "加载中...";
+        let {data, error} = await sb.storage.from("files").list();
+        if(error){
+            box.innerHTML = "加载失败：" + error.message;
+            return;
+        }
+        allFiles = data || [];
+        renderFiles();
     }
 
-    // 上传通用逻辑（保留完整路径，不乱处理）
+    // 渲染文件列表
+    function renderFiles(){
+        let list = allFiles.filter(item => item.name.toLowerCase().includes(searchTxt));
+        let box = document.getElementById("fileBox");
+        if(list.length === 0){
+            box.innerHTML = "暂无匹配文件";
+            return;
+        }
+
+        if(viewType === 'list'){
+            let html = "";
+            list.forEach(file => {
+                let url = sb.storage.from("files").getPublicUrl(file.name).data.publicUrl;
+                html += `
+                <div class="file-item">
+                    <input type="checkbox" class="file-chk" value="${file.name}">
+                    <span class="name">${file.name}</span>
+                    <div>
+                        <a href="${url}" target="_blank">打开预览</a>
+                        <button onclick="delOne('${file.name}')" style="margin-left:8px;padding:3px 8px;font-size:12px;background:#f56c6c;color:#fff;border:none;border-radius:4px">删除</button>
+                    </div>
+                </div>`;
+            });
+            box.innerHTML = html;
+        } else {
+            let html = '<div class="file-grid">';
+            list.forEach(file => {
+                let url = sb.storage.from("files").getPublicUrl(file.name).data.publicUrl;
+                let isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
+                html += `
+                <div class="grid-item">
+                    <input type="checkbox" class="file-chk" value="${file.name}">
+                    ${isImg ? `<img src="${url}" alt="">` : `<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
+                    <div class="name">${file.name}</div>
+                </div>`;
+            });
+            html += "</div>";
+            box.innerHTML = html;
+        }
+    }
+
+    // 上传处理（核心修复）
     async function handleUpload(files){
         if(!files.length) return;
         for(let file of files){
-            // 关键：用 webkitRelativePath 保留完整路径，不会变成空文件夹
+            // 关键：用 webkitRelativePath 保留文件的完整路径，不会变成空文件夹
             let path = file.webkitRelativePath || file.name;
-            // 只过滤非法字符，不修改层级和文件名
-            let safePath = path.replace(/[^\u4e00-\u9fa5a-zA-Z0-9_\-./]/g,"_");
-            await supabase.storage.from("files").upload(safePath,file);
+            // 只过滤非法字符，不修改文件名和层级
+            let safePath = path.replace(/[^\u4e00-\u9fa5a-zA-Z0-9_\-./]/g, "_");
+            await sb.storage.from("files").upload(safePath, file);
         }
-        alert("上传成功！");
+        alert("上传成功！文件已保留原目录结构");
         loadFiles();
     }
 
-    // 绑定文件选择事件
-    document.getElementById("fileInput").onchange = function(e){
+    // 绑定上传事件
+    document.getElementById("fileInput").onchange = e => {
         handleUpload(e.target.files);
-        this.value = "";
+        e.target.value = "";
     };
-    document.getElementById("folderInput").onchange = function(e){
+    document.getElementById("folderInput").onchange = e => {
         handleUpload(e.target.files);
-        this.value = "";
+        e.target.value = "";
     };
 
-    // 单删
-    window.delOne = async function(name){
-        if(!confirm("确定删除该文件？"))return;
-        await supabase.storage.from("files").remove([name]);
+    // 单文件删除
+    window.delOne = async name => {
+        if(!confirm("确定删除该文件？")) return;
+        await sb.storage.from("files").remove([name]);
         loadFiles();
-    }
+    };
 
     // 批量删除
-    document.getElementById("batchDelete").onclick = async function(){
-        let arr = Array.from(document.querySelectorAll(".file-check:checked")).map(c=>c.value);
-        if(!arr.length) return alert("请先勾选文件");
-        if(!confirm(`确定批量删除${arr.length}个文件？`))return;
-        await supabase.storage.from("files").remove(arr);
+    document.getElementById("batchDelete").onclick = async () => {
+        let selected = Array.from(document.querySelectorAll(".file-chk:checked")).map(c => c.value);
+        if(!selected.length) return alert("请先勾选文件");
+        if(!confirm(`确定批量删除 ${selected.length} 个文件？`)) return;
+        await sb.storage.from("files").remove(selected);
         loadFiles();
-    }
+    };
 
     // 批量下载
-    document.getElementById("batchDownload").onclick = function(){
-        let arr = Array.from(document.querySelectorAll(".file-check:checked")).map(c=>c.value);
-        if(!arr.length) return alert("请先勾选文件");
-        arr.forEach(name=>{
-            let url = supabase.storage.from("files").getPublicUrl(name).data.publicUrl;
+    document.getElementById("batchDownload").onclick = () => {
+        let selected = Array.from(document.querySelectorAll(".file-chk:checked")).map(c => c.value);
+        if(!selected.length) return alert("请先勾选文件");
+        selected.forEach(name => {
+            let url = sb.storage.from("files").getPublicUrl(name).data.publicUrl;
             let a = document.createElement("a");
             a.href = url;
             a.download = name;
             a.click();
-        })
-    }
+        });
+    };
 
     renderCate();
     loadFiles();
