@@ -3,224 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>私有文件存储系统</title>
+    <title>私有文件存储</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: system-ui, sans-serif; }
-        body { background: #f4f7fc; color: #333; }
-        .login-wrap { width: 100vw; height: 100vh; background: linear-gradient(135deg,#667eea,#764ba2); display: flex; align-items: center; justify-content: center; }
-        .login-box { width: 90%; max-width: 420px; background: #fff; border-radius: 20px; padding: 40px 30px; text-align: center; }
-        .login-box h2 { margin-bottom: 20px; }
-        #pwdInput { width: 100%; height: 50px; padding: 0 16px; border: 1px solid #eee; border-radius: 12px; margin-bottom: 20px; font-size: 16px; }
-        #loginBtn { width: 100%; height: 50px; border: none; border-radius: 12px; background: #667eea; color: #fff; font-size: 17px; cursor: pointer; }
-        .err-tip { color: #f56c6c; height: 20px; margin-bottom: 10px; }
-        .container { display: none; padding: 20px; max-width: 1200px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 16px 20px; border-radius: 16px; margin-bottom: 20px; }
-        .logout-btn { padding: 8px 16px; background: #f56c6c; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
-        .toolbar { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
-        .toolbar button { padding: 0 18px; height: 42px; border: none; border-radius: 10px; cursor: pointer; }
-        .btn-primary { background: #667eea; color: #fff; }
-        .btn-success { background: #40b970; color: #fff; }
-        .btn-danger { background: #f56c6c; color: #fff; }
-        .search { flex: 1; min-width: 220px; height: 42px; padding: 0 16px; border: 1px solid #e5e7eb; border-radius: 10px; }
-        .category-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
-        .category-bar button { padding: 8px 18px; border-radius: 20px; border: none; background: #eef1f8; cursor: pointer; }
-        .category-bar button.active { background: #667eea; color: #fff; }
-        .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
-        .file-card { background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-        .file-preview { height: 140px; display: flex; align-items: center; justify-content: center; background: #f8f9fc; }
-        .file-preview img { width: 100%; height: 100%; object-fit: cover; }
-        .file-icon { font-size: 48px; }
-        .file-desc { padding: 12px; }
-        .file-name { font-size: 13px; word-break: break-all; }
-        .file-time { font-size: 11px; color: #999; margin-top: 6px; }
-        .file-check { padding: 8px 12px; border-top: 1px solid #f4f4f4; display: flex; justify-content: space-between; align-items: center; }
-        .empty-tip { text-align: center; padding: 80px 0; color: #999; }
+        *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+        body{background:#f4f7fc}
+        .login{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center}
+        .login-box{background:#fff;padding:40px;border-radius:20px;width:90%;max-width:400px;text-align:center}
+        input{width:100%;height:50px;margin:10px 0;padding:0 15px;border:1px solid #ddd;border-radius:12px;font-size:16px}
+        button{width:100%;height:50px;background:#667eea;color:white;border:none;border-radius:12px;font-size:16px;cursor:pointer}
+        #main{display:none;padding:20px}
+        .tools{margin:20px 0;display:flex;gap:10px;flex-wrap:wrap}
+        .btn{padding:10px 16px;background:#667eea;color:white;border:none;border-radius:8px}
+        .danger{background:#f56c6c}
+        .file-item{background:#fff;padding:12px;margin:8px 0;border-radius:10px;display:flex;justify-content:space-between}
     </style>
 </head>
 <body>
 
-<div class="login-wrap" id="loginPage">
+<div class="login" id="loginPage">
     <div class="login-box">
-        <h2>🔐 私有文件存储系统</h2>
-        <input type="password" id="pwdInput" placeholder="请输入密码">
-        <div class="err-tip" id="errTip"></div>
-        <button id="loginBtn">登录</button>
+        <h2>🔐 登录</h2>
+        <input type="password" id="pwd" placeholder="密码：123456">
+        <button id="loginBtn">点我登录</button>
     </div>
 </div>
 
-<div class="container" id="mainPage">
-    <div class="header">
-        <h1>📁 文件管理</h1>
-        <button class="logout-btn" onclick="logout()">退出</button>
+<div id="main">
+    <h1>📁 文件管理</h1>
+    <div class="tools">
+        <input type="file" id="fileInput" multiple webkitdirectory directory>
+        <button class="btn" onclick="upload()">上传</button>
+        <button class="btn" onclick="batchDownload()">批量下载</button>
+        <button class="btn danger" onclick="batchDel()">批量删除</button>
     </div>
-
-    <div class="toolbar">
-        <input type="file" id="fileUpload" multiple webkitdirectory directory style="display:none">
-        <button class="btn-primary" onclick="document.getElementById('fileUpload').click()">📤 上传</button>
-        <button class="btn-success" onclick="batchDownload()">📥 批量下载</button>
-        <button class="btn-danger" onclick="batchDelete()">🗑️ 批量删除</button>
-        <input class="search" id="searchInput" placeholder="搜索...">
-    </div>
-
-    <div class="category-bar">
-        <button class="active" onclick="setCategory('all', this)">全部</button>
-        <button onclick="setCategory('image', this)">图片</button>
-        <button onclick="setCategory('video', this)">视频</button>
-        <button onclick="setCategory('audio', this)">音频</button>
-        <button onclick="setCategory('doc', this)">文档</button>
-    </div>
-
-    <div class="file-grid" id="fileBox">
-        <div class="empty-tip">加载中...</div>
-    </div>
+    <div id="fileList"></div>
 </div>
 
 <script>
+// ========== 配置 ==========
 const SUPABASE_URL = "https://ivmgttyeszqvlqnpqsrw.supabase.co";
 const SUPABASE_KEY = "sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V";
-const LOGIN_PASS = "123456";
+const PASSWORD = "123456";
+
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let allFiles = [];
-let currentCategory = "all";
+// ==========================================
+// 登录（一定有反应！）
+// ==========================================
+document.getElementById("loginBtn").onclick = function () {
+    let val = document.getElementById("pwd").value;
+    if (val === PASSWORD) {
+        document.getElementById("loginPage").style.display = "none";
+        document.getElementById("main").style.display = "block";
+        loadFiles();
+    } else {
+        alert("密码错误");
+    }
+};
 
-// 登录
-document.getElementById("loginBtn").addEventListener("click", async () => {
-    const pwd = document.getElementById("pwdInput").value.trim();
-    const errDom = document.getElementById("errTip");
-    if (pwd !== LOGIN_PASS) {
-        errDom.textContent = "密码错误";
+// ==========================================
+// 加载文件
+// ==========================================
+async function loadFiles() {
+    let dom = document.getElementById("fileList");
+    dom.innerHTML = "加载中...";
+    
+    let { data, error } = await supabase.storage.from("files").list();
+    if (error) {
+        dom.innerHTML = "错误：" + error.message;
         return;
     }
-    errDom.textContent = "";
-    document.getElementById("loginPage").style.display = "none";
-    document.getElementById("mainPage").style.display = "block";
-    await loadFiles();
-});
 
-// 回车登录
-document.getElementById("pwdInput").addEventListener("keydown", e => {
-    if (e.key === "Enter") document.getElementById("loginBtn").click();
-});
-
-function logout() {
-    document.getElementById("mainPage").style.display = "none";
-    document.getElementById("loginPage").style.display = "flex";
-    document.getElementById("pwdInput").value = "";
-}
-
-// 加载文件（加超时防止卡死）
-async function loadFiles() {
-    const box = document.getElementById("fileBox");
-    box.innerHTML = '<div class="empty-tip">加载中...</div>';
-    try {
-        const { data, error } = await Promise.race([
-            supabase.storage.from("files").list(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("请求超时，请检查RLS策略")), 5000))
-        ]);
-        if (error) throw error;
-        allFiles = data || [];
-        filterFiles();
-    } catch (err) {
-        box.innerHTML = `<div class="empty-tip">加载失败：${err.message}</div>`;
-    }
-}
-
-function getFileType(name) {
-    const ext = name.split(".").pop().toLowerCase();
-    const img = ["jpg","jpeg","png","gif","webp"];
-    const video = ["mp4","mov","avi","mkv"];
-    const audio = ["mp3","wav","flac"];
-    const doc = ["txt","pdf","doc","docx","xls","xlsx"];
-    if (img.includes(ext)) return "image";
-    if (video.includes(ext)) return "video";
-    if (audio.includes(ext)) return "audio";
-    if (doc.includes(ext)) return "doc";
-    return "other";
-}
-
-function getFileIcon(type) {
-    const icons = { image:"🖼️", video:"🎬", audio:"🎵", doc:"📄", other:"📦" };
-    return icons[type] || "📦";
-}
-
-function filterFiles() {
-    const key = document.getElementById("searchInput").value.toLowerCase();
-    let list = allFiles;
-    if (currentCategory !== "all") list = list.filter(i => getFileType(i.name) === currentCategory);
-    if (key) list = list.filter(i => i.name.toLowerCase().includes(key));
-    render(list);
-}
-
-function setCategory(cat, dom) {
-    currentCategory = cat;
-    document.querySelectorAll(".category-bar button").forEach(b => b.classList.remove("active"));
-    dom.classList.add("active");
-    filterFiles();
-}
-
-document.getElementById("searchInput").addEventListener("input", filterFiles);
-
-function render(list) {
-    const box = document.getElementById("fileBox");
-    if (!list.length) { box.innerHTML = '<div class="empty-tip">暂无文件</div>'; return; }
     let html = "";
-    list.forEach(item => {
-        const t = getFileType(item.name);
-        const icon = getFileIcon(t);
-        const url = supabase.storage.from("files").getPublicUrl(item.name).data.publicUrl;
+    data.forEach(f => {
+        let url = supabase.storage.from("files").getPublicUrl(f.name).data.publicUrl;
         html += `
-        <div class="file-card">
-            <div class="file-preview">${t==="image"?`<img src="${url}">`:`<span class="file-icon">${icon}</span>`}</div>
-            <div class="file-desc"><div class="file-name">${item.name}</div></div>
-            <div class="file-check">
-                <input type="checkbox" class="check-item" value="${item.name}">
-                <button onclick="del('${item.name}')" style="background:#f56c6c;color:white;border:none;border-radius:4px">删除</button>
+        <div class="file-item">
+            <input type="checkbox" value="${f.name}"> ${f.name}
+            <div>
+                <a href="${url}" target="_blank">打开</a> |
+                <button onclick="del('${f.name}')">删除</button>
             </div>
         </div>`;
     });
-    box.innerHTML = html;
+    dom.innerHTML = html;
 }
 
-// 上传（修复中文文件名）
-document.getElementById("fileUpload").addEventListener("change", async e => {
-    const files = e.target.files;
-    if (!files.length) return;
+// ==========================================
+// 上传
+// ==========================================
+async function upload() {
+    let files = document.getElementById("fileInput").files;
     for (let f of files) {
-        const safe = f.name.replace(/[^a-zA-Z0-9_\-.]/g, "_");
+        let safe = f.name.replace(/[^a-z0-9_\-.]/gi, "_");
         await supabase.storage.from("files").upload(Date.now() + "_" + safe, f);
     }
-    alert("上传完成");
+    alert("上传成功");
     loadFiles();
-});
+}
 
-// 删除单个
+// ==========================================
+// 删除
+// ==========================================
 async function del(name) {
     if (!confirm("确定删除？")) return;
     await supabase.storage.from("files").remove([name]);
     loadFiles();
 }
 
+// ==========================================
 // 批量删除
-async function batchDelete() {
-    const arr = Array.from(document.querySelectorAll(".check-item:checked")).map(i => i.value);
-    if (!arr.length) return alert("请勾选文件");
-    if (!confirm(`删除 ${arr.length} 个文件？`)) return;
+// ==========================================
+async function batchDel() {
+    let arr = Array.from(document.querySelectorAll("input:checked")).map(i => i.value);
+    if (arr.length === 0) return alert("请选择");
     await supabase.storage.from("files").remove(arr);
     loadFiles();
 }
 
+// ==========================================
 // 批量下载
+// ==========================================
 function batchDownload() {
-    const arr = Array.from(document.querySelectorAll(".check-item:checked")).map(i => i.value);
-    if (!arr.length) return alert("请勾选文件");
+    let arr = Array.from(document.querySelectorAll("input:checked")).map(i => i.value);
     arr.forEach(n => {
-        const url = supabase.storage.from("files").getPublicUrl(n).data.publicUrl;
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = n;
-        a.click();
+        let u = supabase.storage.from("files").getPublicUrl(n).data.publicUrl;
+        let a = document.createElement("a");
+        a.href = u; a.download = n; a.click();
     });
 }
 </script>
