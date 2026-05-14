@@ -1,14 +1,119 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* 基础样式 */
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f6f7f9;
+        }
+        .tool-bar {
+            margin: 15px 0;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        button {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 6px;
+            background: #409eff;
+            color: white;
+            cursor: pointer;
+        }
+        button.danger {
+            background: #f56c6c;
+        }
+        input.search {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            min-width: 220px;
+        }
+        input#fileInput {
+            padding: 5px;
+        }
+
+        /* 列表模式 */
+        .file-list {
+            margin-top: 15px;
+        }
+        .file-item {
+            background: white;
+            padding: 10px 12px;
+            margin: 6px 0;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* 网格模式 */
+        .file-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 12px;
+            margin-top: 15px;
+        }
+        .grid-item {
+            background: white;
+            padding: 12px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .grid-item img {
+            max-width: 100%;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 6px;
+        }
+        .grid-item .name {
+            margin-top: 8px;
+            font-size: 13px;
+            word-break: break-all;
+        }
+
+        /* 排列切换 */
+        .view-mode {
+            margin-left: auto;
+            display: flex;
+            gap: 6px;
+        }
+        .view-mode button {
+            background: #eee;
+            color: #333;
+        }
+        .view-mode button.active {
+            background: #409eff;
+            color: white;
+        }
+    </style>
 </head>
 <body>
-    <h2>共享文件存储</h2>
-    <input type="file" id="fileInput" multiple>
-    <br><br>
-    <button id="uploadBtn">上传文件</button>
+
+    <h2>📁 共享文件存储</h2>
+
+    <!-- 工具栏 -->
+    <div class="tool-bar">
+        <input type="file" id="fileInput" multiple webkitdirectory directory>
+        <button id="uploadBtn">📤 上传文件/文件夹</button>
+        <button id="batchDownload">📥 批量下载</button>
+        <button id="batchDelete" class="danger">🗑️ 批量删除</button>
+        <input class="search" id="search" placeholder="🔍 搜索文件名/图片..." oninput="doSearch()">
+        <div class="view-mode">
+            <button id="viewList" class="active" onclick="switchView('list')">列表</button>
+            <button id="viewGrid" onclick="switchView('grid')">网格</button>
+        </div>
+    </div>
+
     <hr>
+
+    <!-- 文件区域 -->
     <div id="fileList">正在加载文件列表...</div>
 
     <script>
@@ -16,89 +121,157 @@
             // 配置
             const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
             const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
-            
-            console.log('1. 开始初始化');
-            
-            // 创建 Supabase 客户端
-            const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-            console.log('2. Supabase 客户端创建完成');
-            
+
+            let supabase;
+            let allFiles = [];
+            let currentView = 'list';
+            let searchKeyword = '';
+
+            console.log('初始化');
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            loadFiles();
+
             // 加载文件列表
             async function loadFiles() {
-                console.log('3. loadFiles 开始执行');
                 const container = document.getElementById('fileList');
                 container.innerHTML = '正在加载...';
-                
                 try {
                     const { data, error } = await supabase.storage.from('files').list();
-                    console.log('4. Supabase 返回结果', { data, error });
-                    
                     if (error) {
                         container.innerHTML = '加载失败: ' + error.message;
                         return;
                     }
-                    
-                    if (!data || data.length === 0) {
-                        container.innerHTML = '暂无文件，请上传';
-                        return;
-                    }
-                    
-                    let html = '';
-                    for (let file of data) {
-                        const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
-                        html += `<div>📄 ${file.name} - <a href="${url}" target="_blank">查看/下载</a></div>`;
-                    }
-                    container.innerHTML = html;
-                    console.log('5. 文件列表渲染完成，共', data.length, '个文件');
+                    allFiles = data || [];
+                    renderFiles();
                 } catch (err) {
-                    console.error('6. loadFiles 出错:', err);
                     container.innerHTML = '加载出错: ' + err.message;
                 }
             }
-            
-            // 上传文件
-            async function uploadFiles(files) {
-                console.log('7. uploadFiles 开始，文件数量:', files.length);
-                
-                for (let i = 0; i < files.length; i++) {
-                    const file = files[i];
-                    const fileName = Date.now() + '_' + file.name;
-                    console.log(`8. 正在上传第 ${i+1} 个文件:`, fileName);
-                    
-                    const { error } = await supabase.storage.from('files').upload(fileName, file);
-                    if (error) {
-                        alert(`上传失败: ${file.name} - ${error.message}`);
-                        return false;
-                    }
-                    console.log(`9. 上传成功:`, fileName);
-                }
-                return true;
-            }
-            
-            // 绑定上传按钮事件
-            const uploadBtn = document.getElementById('uploadBtn');
-            uploadBtn.onclick = async function() {
-                console.log('10. 上传按钮被点击');
-                const fileInput = document.getElementById('fileInput');
-                const files = fileInput.files;
-                
-                if (!files.length) {
-                    alert('请先选择文件');
+
+            // 渲染文件（搜索 + 视图）
+            function renderFiles() {
+                const container = document.getElementById('fileList');
+                let list = allFiles.filter(f => {
+                    const name = f.name.toLowerCase();
+                    const kw = searchKeyword.toLowerCase();
+                    return name.includes(kw);
+                });
+
+                if (list.length === 0) {
+                    container.innerHTML = '暂无文件';
                     return;
                 }
-                
-                const success = await uploadFiles(files);
-                if (success) {
-                    alert('上传完成！');
-                    fileInput.value = '';
-                    await loadFiles();
+
+                if (currentView === 'list') {
+                    renderList(list);
+                } else {
+                    renderGrid(list);
                 }
+            }
+
+            // 列表模式
+            function renderList(list) {
+                let html = '';
+                list.forEach(file => {
+                    const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
+                    html += `
+                    <div class="file-item">
+                        <input type="checkbox" class="file-check" value="${file.name}">
+                        <span>${file.name}</span>
+                        <div>
+                            <a href="${url}" target="_blank">查看</a> &nbsp;
+                            <button onclick="delSingle('${file.name}')" style="padding:4px 8px;font-size:12px">删除</button>
+                        </div>
+                    </div>`;
+                });
+                document.getElementById('fileList').innerHTML = html;
+            }
+
+            // 网格模式（带图片预览）
+            function renderGrid(list) {
+                let html = '';
+                list.forEach(file => {
+                    const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
+                    const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name);
+                    html += `
+                    <div class="grid-item">
+                        <input type="checkbox" class="file-check" value="${file.name}">
+                        ${isImg ? `<img src="${url}">` : '<div style="height:100px;line-height:100px">📄</div>'}
+                        <div class="name">${file.name}</div>
+                    </div>`;
+                });
+                document.getElementById('fileList').innerHTML = html;
+            }
+
+            // 切换视图
+            window.switchView = function(mode) {
+                currentView = mode;
+                document.querySelectorAll('.view-mode button').forEach(b => b.classList.remove('active'));
+                document.getElementById('view' + mode.charAt(0).toUpperCase() + mode.slice(1)).classList.add('active');
+                renderFiles();
             };
-            
-            // 页面加载完成后自动加载文件列表
-            console.log('11. 准备加载文件列表');
-            loadFiles();
-            console.log('12. 初始化完成');
+
+            // 搜索
+            window.doSearch = function() {
+                searchKeyword = document.getElementById('search').value;
+                renderFiles();
+            };
+
+            // 上传（支持多文件 + 文件夹）
+            document.getElementById('uploadBtn').onclick = async () => {
+                const input = document.getElementById('fileInput');
+                const files = input.files;
+                if (!files.length) {
+                    alert('请选择文件或文件夹');
+                    return;
+                }
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const safeName = file.name.replace(/[^a-z0-9_\-.]/gi, '_');
+                    const fileName = Date.now() + '_' + safeName;
+                    await supabase.storage.from('files').upload(fileName, file);
+                }
+                alert('上传完成！');
+                input.value = '';
+                loadFiles();
+            };
+
+            // 单个删除
+            window.delSingle = async (name) => {
+                if (!confirm('确定删除？')) return;
+                await supabase.storage.from('files').remove([name]);
+                loadFiles();
+            };
+
+            // 批量删除
+            document.getElementById('batchDelete').onclick = async () => {
+                const checks = document.querySelectorAll('.file-check:checked');
+                const arr = Array.from(checks).map(c => c.value);
+                if (arr.length === 0) {
+                    alert('请选择文件');
+                    return;
+                }
+                if (!confirm(`确定删除 ${arr.length} 个文件？`)) return;
+                await supabase.storage.from('files').remove(arr);
+                loadFiles();
+            };
+
+            // 批量下载
+            document.getElementById('batchDownload').onclick = () => {
+                const checks = document.querySelectorAll('.file-check:checked');
+                const arr = Array.from(checks).map(c => c.value);
+                if (arr.length === 0) {
+                    alert('请选择文件');
+                    return;
+                }
+                arr.forEach(name => {
+                    const url = supabase.storage.from('files').getPublicUrl(name).data.publicUrl;
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = name;
+                    a.click();
+                });
+            };
         })();
     </script>
 </body>
