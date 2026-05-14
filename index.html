@@ -2,27 +2,16 @@
 <html>
 <head>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style>
-        body { font-family: system-ui; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .file-item { border: 1px solid #ddd; padding: 10px; margin: 8px 0; display: flex; justify-content: space-between; align-items: center; }
-        button { background: #4CAF50; color: white; border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; }
-        input { margin: 10px 0; }
-        a { color: #2196F3; text-decoration: none; }
-    </style>
 </head>
 <body>
-    <h2>📁 共享文件存储</h2>
-    
-    <div>
-        <input type="file" id="fileInput" multiple>
-        <button id="uploadBtn">上传文件</button>
-    </div>
-    
-    <h3>文件列表</h3>
+    <h2>共享文件存储</h2>
+    <input type="file" id="fileInput" multiple>
+    <br><br>
+    <button id="uploadBtn">上传文件</button>
+    <hr>
     <div id="fileList">加载中...</div>
 
     <script>
-        // 配置（已确认正确）
         const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
         const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
         
@@ -34,12 +23,10 @@
             container.innerHTML = '加载中...';
             
             const { data, error } = await supabase.storage.from('files').list();
-            
             if (error) {
                 container.innerHTML = '错误: ' + error.message;
                 return;
             }
-            
             if (!data || data.length === 0) {
                 container.innerHTML = '暂无文件';
                 return;
@@ -48,39 +35,37 @@
             let html = '';
             for (let file of data) {
                 const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
-                html += `
-                    <div class="file-item">
-                        <span>📄 ${file.name}</span>
-                        <a href="${url}" target="_blank">查看/下载</a>
-                    </div>
-                `;
+                html += `<div>${file.name} <a href="${url}" target="_blank">下载</a></div>`;
             }
             container.innerHTML = html;
         }
         
-        // 上传文件
-        document.getElementById('uploadBtn').onclick = async () => {
+        // 获取按钮并绑定事件（用最可靠的方式）
+        const uploadBtn = document.getElementById('uploadBtn');
+        uploadBtn.onclick = function() {
             const files = document.getElementById('fileInput').files;
             if (!files.length) {
                 alert('请先选择文件');
                 return;
             }
             
-            for (let file of files) {
-                const fileName = Date.now() + '_' + file.name;
-                const { error } = await supabase.storage.from('files').upload(fileName, file);
-                if (error) {
-                    alert('上传失败: ' + error.message);
-                    return;
+            // 使用立即执行函数处理异步上传
+            (async () => {
+                for (let file of files) {
+                    const fileName = Date.now() + '_' + file.name;
+                    const { error } = await supabase.storage.from('files').upload(fileName, file);
+                    if (error) {
+                        alert('上传失败: ' + error.message);
+                        return;
+                    }
                 }
-            }
-            
-            alert('上传完成！');
-            document.getElementById('fileInput').value = '';
-            loadFiles();
+                alert('上传完成！');
+                document.getElementById('fileInput').value = '';
+                loadFiles();
+            })();
         };
         
-        // 页面加载时显示文件列表
+        // 初始化加载文件列表
         loadFiles();
     </script>
 </body>
