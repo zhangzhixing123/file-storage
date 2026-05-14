@@ -1,9 +1,69 @@
 <!DOCTYPE html>
 <html>
-<head><title>测试</title></head>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
 <body>
-    <h1>Hello, GitHub Pages!</h1>
-    <p>如果你能看到这行字，说明文件已经更新成功。</p>
-    <button onclick="alert('按钮点击成功！')">点击测试</button>
+    <h2>共享文件存储</h2>
+    <input type="file" id="fileInput" multiple>
+    <button id="uploadBtn">上传文件</button>
+    <div id="fileList">加载中...</div>
+
+    <script>
+        const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
+        async function loadFiles() {
+            const container = document.getElementById('fileList');
+            container.innerHTML = '加载中...';
+            
+            const { data, error } = await supabase.storage.from('files').list();
+            
+            if (error) {
+                container.innerHTML = '错误: ' + error.message;
+                return;
+            }
+            
+            if (!data || data.length === 0) {
+                container.innerHTML = '暂无文件';
+                return;
+            }
+            
+            let html = '';
+            for (let file of data) {
+                const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
+                html += `<div>
+                            ${file.name} 
+                            <a href="${url}" target="_blank">查看/下载</a>
+                         </div>`;
+            }
+            container.innerHTML = html;
+        }
+        
+        document.getElementById('uploadBtn').onclick = async () => {
+            const files = document.getElementById('fileInput').files;
+            if (!files.length) {
+                alert('请先选择文件');
+                return;
+            }
+            
+            for (let file of files) {
+                const fileName = Date.now() + '_' + file.name;
+                const { error } = await supabase.storage.from('files').upload(fileName, file);
+                if (error) {
+                    alert('上传失败: ' + error.message);
+                    return;
+                }
+            }
+            
+            alert('上传完成！');
+            document.getElementById('fileInput').value = '';
+            loadFiles();
+        };
+        
+        loadFiles();
+    </script>
 </body>
 </html>
