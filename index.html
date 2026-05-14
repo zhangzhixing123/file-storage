@@ -4,59 +4,32 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-    <h2>共享文件存储</h2>
-    <input type="file" id="fileInput" multiple>
-    <button id="uploadBtn">上传文件</button>
-    <div id="fileList">加载中...</div>
+    <h2>Supabase 连接测试</h2>
+    <button onclick="test()">点击测试连接</button>
+    <div id="result"></div>
 
     <script>
-        // 您的正确配置（已通过之前测试确认）
-        const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
-        
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        console.log('✅ 客户端初始化成功，配置正确');
-
-        async function loadFiles() {
-            const container = document.getElementById('fileList');
-            container.innerHTML = '加载中...';
-            const { data, error } = await supabase.storage.from('files').list();
-            if (error) {
-                container.innerHTML = '错误: ' + error.message;
-                return;
-            }
-            if (!data || data.length === 0) {
-                container.innerHTML = '暂无文件';
-                return;
-            }
-            let html = '';
-            for (let file of data) {
-                const url = supabase.storage.from('files').getPublicUrl(file.name).data.publicUrl;
-                html += `<div>${file.name} <a href="${url}" target="_blank">查看/下载</a></div>`;
-            }
-            container.innerHTML = html;
-        }
-
-        document.getElementById('uploadBtn').onclick = async () => {
-            const files = document.getElementById('fileInput').files;
-            if (!files.length) {
-                alert('请先选择文件');
-                return;
-            }
-            for (let file of files) {
-                const fileName = Date.now() + '_' + file.name;
-                const { error } = await supabase.storage.from('files').upload(fileName, file);
+        async function test() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '测试中...';
+            
+            const url = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
+            const key = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
+            
+            try {
+                // 直接测试 Supabase 连接
+                const supabase = window.supabase.createClient(url, key);
+                const { data, error } = await supabase.storage.from('files').list();
+                
                 if (error) {
-                    alert('上传失败: ' + error.message);
-                    return;
+                    resultDiv.innerHTML = '❌ 连接失败: ' + error.message;
+                } else {
+                    resultDiv.innerHTML = '✅ 连接成功！找到 ' + data.length + ' 个文件。配置正确！';
                 }
+            } catch (err) {
+                resultDiv.innerHTML = '❌ 错误: ' + err.message;
             }
-            alert('上传完成！');
-            document.getElementById('fileInput').value = '';
-            await loadFiles();
-        };
-
-        loadFiles();
+        }
     </script>
 </body>
 </html>
