@@ -281,11 +281,13 @@
         document.getElementById("folderInput").click();
     }
 
-    // 上传通用逻辑（保留完整路径）
+    // 上传通用逻辑（保留完整路径，不乱处理）
     async function handleUpload(files){
         if(!files.length) return;
         for(let file of files){
+            // 关键：用 webkitRelativePath 保留完整路径，不会变成空文件夹
             let path = file.webkitRelativePath || file.name;
+            // 只过滤非法字符，不修改层级和文件名
             let safePath = path.replace(/[^\u4e00-\u9fa5a-zA-Z0-9_\-./]/g,"_");
             await supabase.storage.from("files").upload(safePath,file);
         }
