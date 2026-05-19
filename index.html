@@ -46,6 +46,7 @@
         .page-btn{padding:6px 12px;background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer;}
         .page-info{font-size:14px;color:#666;margin-left:10px;}
         .note-input{width:120px;padding:3px;border:1px solid #ddd;border-radius:3px;font-size:12px;}
+        .search-type-select{padding:8px;border-radius:6px;border:1px solid #ddd;}
     </style>
 </head>
 <body>
@@ -98,8 +99,12 @@
             <button id="batchDelete" class="danger">🗑️ 批量删除</button>
 
             <div class="search-wrap">
-                <input class="search" id="search" placeholder="文件名搜索">
-                <input class="search" id="noteSearch" placeholder="备注筛选">
+                <select class="search-type-select" id="searchType">
+                    <option value="fuzzy">模糊搜索</option>
+                    <option value="exact">精确搜索</option>
+                </select>
+                <input class="search" id="search" placeholder="文件名批量搜索(空格/逗号分隔)">
+                <input class="search" id="noteSearch" placeholder="备注批量搜索(空格/逗号分隔)">
                 <button onclick="doSearch()">🔍 搜索/刷新</button>
             </div>
 
@@ -127,15 +132,15 @@
 <script>
 // ==================== 登录 ====================
 const FIX_PWD = "123456";
-let autoRefreshTimer; // 自动刷新定时器
+let autoRefreshTimer;
 
 function userLogin(){
     let pwd = document.getElementById("userPwd").value.trim();
     if(pwd === FIX_PWD){
         document.getElementById("loginPage").classList.add("hide-page");
         document.getElementById("mainSystem").classList.remove("hide-page");
-        loadAllFiles(); // 一登录就加载全部文件
-        startAutoRefresh(); // 启动2分钟自动刷新
+        loadAllFiles();
+        startAutoRefresh();
     }else{
         alert("密码错误");
     }
@@ -155,10 +160,9 @@ function userLogin(){
     let dateEnd = '';
     let totalStorageGB = parseFloat(localStorage.getItem('totalStorageGB')) || 1;
     let autoDelDay = parseInt(localStorage.getItem('autoDelDay')) || 0;
-    let pageSize = 9999; // 显示全部文件
+    let pageSize = 9999;
     let currentPage = 1;
     let filteredFiles = [];
-    // 本地存储文件备注
     let fileNoteMap = JSON.parse(localStorage.getItem('fileNoteMap')) || {};
 
     document.getElementById('totalGB').value = totalStorageGB;
@@ -170,7 +174,6 @@ function userLogin(){
         document.getElementById('nowDelSet').innerText=map[autoDelDay];
     }
 
-    // 保存备注
     window.saveFileNote = function(filename,el){
         let note = el.value.trim();
         fileNoteMap[filename] = note;
@@ -233,7 +236,7 @@ function userLogin(){
 
     function updateTotalSpace(totalBytes){
         let total = totalStorageGB * 1024*1024*1024;
-        let pct = total > 0 ? (totalBytes / total * 100).toFixed(2) : 0;
+        let pct = total > 0 ? (totalBytes / total * 100) : 0;
         let used = (totalBytes / 1024 / 1024).toFixed(2);
         let max = (totalStorageGB * 1024).toFixed(2);
         document.getElementById('storageProgress').style.width = pct+'%';
@@ -250,7 +253,11 @@ function userLogin(){
         renderFiles();
     }
 
-    // 点击搜索 = 强制刷新最新文件
+    // 解析批量关键词
+    function parseMultiKeywords(str){
+        return str.trim().split(/[\s,，]+/).filter(k => k);
+    }
+
     window.doSearch = async function(){
         searchTxt = document.getElementById("search").value.trim().toLowerCase();
         noteSearchTxt = document.getElementById("noteSearch").value.trim().toLowerCase();
@@ -265,7 +272,6 @@ function userLogin(){
 
     window.triggerFileUpload = () => document.getElementById("fileInput").click();
 
-    // 加载全部文件（登录进页、自动刷新、搜索都用这个）
     window.loadAllFiles = async function(){
         let box = document.getElementById("fileBox");
         box.innerHTML = "加载中...";
@@ -279,15 +285,39 @@ function userLogin(){
         renderFiles();
     }
 
-    // 渲染全部文件
+    // 渲染 支持模糊/精确切换 + 批量关键词
     function renderFiles(){
+        let searchMode = document.getElementById("searchType").value;
+        let nameKeys = parseMultiKeywords(searchTxt);
+        let noteKeys = parseMultiKeywords(noteSearchTxt);
+
         filteredFiles = allFiles.filter(f => {
-            let nameOk = f.name.toLowerCase().includes(searchTxt);
+            let fileName = f.name.toLowerCase();
+            let noteText = (fileNoteMap[f.name] || "").toLowerCase();
+            let nameOk = true;
             let noteOk = true;
-            if(noteSearchTxt){
-                let note = (fileNoteMap[f.name]||"").toLowerCase();
-                noteOk = note.includes(noteSearchTxt);
+
+            // 文件名匹配
+            if(nameKeys.length > 0){
+                if(searchMode === 'fuzzy'){
+                    // 模糊：包含任意一个
+                    nameOk = nameKeys.some(k => fileName.includes(k));
+                }else{
+                    // 精确：完全相等任意一个
+                    nameOk = nameKeys.some(k => fileName === k);
+                }
             }
+
+            // 备注匹配
+            if(noteKeys.length > 0){
+                if(searchMode === 'fuzzy'){
+                    noteOk = noteKeys.some(k => noteText.includes(k));
+                }else{
+                    noteOk = noteKeys.some(k => noteText === k);
+                }
+            }
+
+            // 时间筛选不变
             let t = f.created_at || f.updated_at || '';
             let dateOk = true;
             if(dateStart && t){
@@ -357,7 +387,6 @@ function userLogin(){
         }
     }
 
-    // 上传文件
     document.getElementById("fileInput").onchange = async e => {
         let fs = e.target.files;
         for(let f of fs){
@@ -372,7 +401,6 @@ function userLogin(){
     window.delOne = async name => {
         if(!confirm("确定删除？")) return;
         await sb.storage.from("files").remove([name]);
-        // 删除同时清空备注
         delete fileNoteMap[name];
         localStorage.setItem('fileNoteMap',JSON.stringify(fileNoteMap));
         loadAllFiles();
@@ -383,7 +411,6 @@ function userLogin(){
         if(arr.length === 0){ alert("请先勾选文件"); return; }
         if(!confirm(`确定删除 ${arr.length} 个文件？`)) return;
         await sb.storage.from("files").remove(arr);
-        // 批量删除清空备注
         arr.forEach(n=>delete fileNoteMap[n]);
         localStorage.setItem('fileNoteMap',JSON.stringify(fileNoteMap));
         loadAllFiles();
@@ -402,12 +429,11 @@ function userLogin(){
     }
 })();
 
-// 2分钟自动刷新最新文件
 function startAutoRefresh(){
     if(autoRefreshTimer) clearInterval(autoRefreshTimer);
     autoRefreshTimer = setInterval(() => {
         loadAllFiles();
-    }, 120000); // 120000ms = 2分钟
+    }, 120000);
 }
 </script>
 </body>
