@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {font-family: Arial, sans-serif;padding: 20px;background: #f6f7f9;margin:0;}
@@ -45,6 +45,7 @@
         .pagination{margin-top:20px;display:flex;gap:8px;align-items:center;}
         .page-btn{padding:6px 12px;background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer;}
         .page-info{font-size:14px;color:#666;margin-left:10px;}
+        .note-input{width:120px;padding:3px;border:1px solid #ddd;border-radius:3px;font-size:12px;}
     </style>
 </head>
 <body>
@@ -98,6 +99,7 @@
 
             <div class="search-wrap">
                 <input class="search" id="search" placeholder="文件名搜索">
+                <input class="search" id="noteSearch" placeholder="备注筛选">
                 <button onclick="doSearch()">🔍 搜索/刷新</button>
             </div>
 
@@ -148,6 +150,7 @@ function userLogin(){
     let allFiles = [];
     let viewType = 'list';
     let searchTxt = '';
+    let noteSearchTxt = '';
     let dateStart = '';
     let dateEnd = '';
     let totalStorageGB = parseFloat(localStorage.getItem('totalStorageGB')) || 1;
@@ -155,6 +158,8 @@ function userLogin(){
     let pageSize = 9999; // 显示全部文件
     let currentPage = 1;
     let filteredFiles = [];
+    // 本地存储文件备注
+    let fileNoteMap = JSON.parse(localStorage.getItem('fileNoteMap')) || {};
 
     document.getElementById('totalGB').value = totalStorageGB;
     document.getElementById('delDaySelect').value = autoDelDay;
@@ -163,6 +168,13 @@ function userLogin(){
     function setDelText(){
         let map={0:'不自动删除',7:'7天前',15:'15天前',30:'30天前',60:'60天前',90:'90天前'};
         document.getElementById('nowDelSet').innerText=map[autoDelDay];
+    }
+
+    // 保存备注
+    window.saveFileNote = function(filename,el){
+        let note = el.value.trim();
+        fileNoteMap[filename] = note;
+        localStorage.setItem('fileNoteMap',JSON.stringify(fileNoteMap));
     }
 
     function formatSize(b) {
@@ -241,6 +253,7 @@ function userLogin(){
     // 点击搜索 = 强制刷新最新文件
     window.doSearch = async function(){
         searchTxt = document.getElementById("search").value.trim().toLowerCase();
+        noteSearchTxt = document.getElementById("noteSearch").value.trim().toLowerCase();
         await loadAllFiles();
     }
 
@@ -270,6 +283,11 @@ function userLogin(){
     function renderFiles(){
         filteredFiles = allFiles.filter(f => {
             let nameOk = f.name.toLowerCase().includes(searchTxt);
+            let noteOk = true;
+            if(noteSearchTxt){
+                let note = (fileNoteMap[f.name]||"").toLowerCase();
+                noteOk = note.includes(noteSearchTxt);
+            }
             let t = f.created_at || f.updated_at || '';
             let dateOk = true;
             if(dateStart && t){
@@ -277,7 +295,7 @@ function userLogin(){
                 if(dateStart && d < dateStart) dateOk = false;
                 if(dateEnd && d > dateEnd) dateOk = false;
             }
-            return nameOk && dateOk;
+            return nameOk && noteOk && dateOk;
         });
 
         let box = document.getElementById("fileBox");
@@ -289,6 +307,7 @@ function userLogin(){
                 let url = sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
                 let size = formatSize(f.metadata?.size);
                 let time = formatTime(f.created_at || f.updated_at);
+                let nowNote = fileNoteMap[f.name] || "";
                 h += `
                 <div class="file-item">
                     <input type="checkbox" class="file-chk" value="${f.name}">
@@ -296,6 +315,9 @@ function userLogin(){
                         <div>${f.name}</div>
                         <div class="file-size-text">大小：${size}</div>
                         <div class="file-time-text">上传时间：${time}</div>
+                        <div style="margin-top:4px;">
+                            <input class="note-input" placeholder="填写备注" value="${nowNote}" onblur="saveFileNote('${f.name}',this)">
+                        </div>
                     </div>
                     <div>
                         <a href="${url}" target="_blank" class="btn-sm" style="background:#909399">预览</a>
@@ -312,6 +334,7 @@ function userLogin(){
                 let isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name);
                 let size = formatSize(f.metadata?.size);
                 let time = formatTime(f.created_at || f.updated_at);
+                let nowNote = fileNoteMap[f.name] || "";
                 h += `
                 <div class="grid-item">
                     <input type="checkbox" class="file-chk" value="${f.name}">
@@ -319,6 +342,9 @@ function userLogin(){
                     <div class="name">${f.name}</div>
                     <div style="font-size:12px;color:#666">${size}</div>
                     <div style="font-size:11px;color:#999">${time}</div>
+                    <div style="margin:4px 0;">
+                        <input class="note-input" style="width:100px" placeholder="备注" value="${nowNote}" onblur="saveFileNote('${f.name}',this)">
+                    </div>
                     <div style="margin-top:6px;display:flex;gap:4px;justify-content:center;">
                         <a href="${url}" target="_blank" class="btn-sm" style="font-size:11px;background:#909399">预览</a>
                         <a href="${url}" download="${f.name}" class="btn-sm" style="font-size:11px;background:#67c23a">下载</a>
@@ -346,6 +372,9 @@ function userLogin(){
     window.delOne = async name => {
         if(!confirm("确定删除？")) return;
         await sb.storage.from("files").remove([name]);
+        // 删除同时清空备注
+        delete fileNoteMap[name];
+        localStorage.setItem('fileNoteMap',JSON.stringify(fileNoteMap));
         loadAllFiles();
     }
 
@@ -354,6 +383,9 @@ function userLogin(){
         if(arr.length === 0){ alert("请先勾选文件"); return; }
         if(!confirm(`确定删除 ${arr.length} 个文件？`)) return;
         await sb.storage.from("files").remove(arr);
+        // 批量删除清空备注
+        arr.forEach(n=>delete fileNoteMap[n]);
+        localStorage.setItem('fileNoteMap',JSON.stringify(fileNoteMap));
         loadAllFiles();
     }
 
