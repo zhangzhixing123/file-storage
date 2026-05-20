@@ -219,8 +219,9 @@ function userLogin(){
     let pageSize = parseInt(localStorage.getItem('pageSize')) || 20;
     let currentPage = 1;
     let filteredFiles = [];
-    
-    let fileNoteMap = JSON.parse(localStorage.getItem('fileNoteMap')) || {};
+
+    // 全局共享备注，所有人互通
+    let globalFileNote = JSON.parse(localStorage.getItem('globalFileNote')) || {};
 
     // 新增：上传人筛选数组
     let selectedUserFilters = [];
@@ -259,10 +260,11 @@ function userLogin(){
         document.getElementById('nowDelSet').innerText=map[autoDelDay];
     }
 
+    // 全局共享保存备注
     window.saveFileNote = function(filename,el){
         let note = el.value.trim();
-        fileNoteMap[filename] = note;
-        localStorage.setItem('fileNoteMap',JSON.stringify(fileNoteMap));
+        globalFileNote[filename] = note;
+        localStorage.setItem('globalFileNote',JSON.stringify(globalFileNote));
     }
 
     function formatSize(b) {
@@ -325,7 +327,7 @@ function userLogin(){
         let used = (totalBytes / 1024 / 1024).toFixed(2);
         let max = (totalStorageGB * 1024).toFixed(2);
         document.getElementById('storageProgress').style.width = pct+'%';
-        // 这里修改了，百分比保留两位小数
+        // 百分比保留两位小数
         document.getElementById('storageText').innerText = `总大小：${used} MB / 容量：${max} MB  占用：${pct.toFixed(2)}%`;
     }
 
@@ -385,10 +387,10 @@ function userLogin(){
 
         filteredFiles = allFiles.filter(f => {
             let fileName = f.name.toLowerCase();
-            let noteText = (fileNoteMap[f.name] || "").toLowerCase();
+            let noteText = (globalFileNote[f.name] || "").toLowerCase();
             let nameOk = true;
             let noteOk = true;
-            let userOk = true; // 上传人筛选
+            let userOk = true;
 
             // 文件名匹配
             if(nameKeys.length > 0){
@@ -404,7 +406,7 @@ function userLogin(){
                     : noteKeys.some(k => noteText === k);
             }
 
-            // 新增：上传人勾选筛选（备注包含勾选人名之一即可）
+            // 上传人勾选筛选
             if(selectedUserFilters.length > 0){
                 userOk = selectedUserFilters.some(user => noteText.includes(user));
             }
@@ -454,7 +456,7 @@ function userLogin(){
                 let url = sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
                 let size = formatSize(f.metadata?.size);
                 let time = formatTime(f.created_at || f.updated_at);
-                let nowNote = fileNoteMap[f.name] || "";
+                let nowNote = globalFileNote[f.name] || "";
                 h += `
                 <div class="file-item">
                     <input type="checkbox" class="file-chk" value="${f.name}">
@@ -481,7 +483,7 @@ function userLogin(){
                 let isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name);
                 let size = formatSize(f.metadata?.size);
                 let time = formatTime(f.created_at || f.updated_at);
-                let nowNote = fileNoteMap[f.name] || "";
+                let nowNote = globalFileNote[f.name] || "";
                 h += `
                 <div class="grid-item">
                     <input type="checkbox" class="file-chk" value="${f.name}">
@@ -530,16 +532,16 @@ function userLogin(){
         renderFiles();
     }
 
-    // 上传文件自动填入当前登录人姓名作为备注
+    // 上传文件自动保留填写当前登录人姓名作为备注（保留此功能）
     document.getElementById("fileInput").onchange = async e => {
         let fs = e.target.files;
         for(let f of fs){
             let safe = f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g, '_');
             await sb.storage.from("files").upload(safe, f);
-            // 自动保存登录人姓名到备注
-            fileNoteMap[safe] = currentLoginUser;
+            // 自动写入登录人姓名到全局共享备注
+            globalFileNote[safe] = currentLoginUser;
         }
-        localStorage.setItem('fileNoteMap',JSON.stringify(fileNoteMap));
+        localStorage.setItem('globalFileNote',JSON.stringify(globalFileNote));
         alert("上传成功，已自动填写上传人姓名备注");
         e.target.value = "";
         currentPage = 1;
@@ -549,8 +551,9 @@ function userLogin(){
     window.delOne = async name => {
         if(!confirm("确定删除？")) return;
         await sb.storage.from("files").remove([name]);
-        delete fileNoteMap[name];
-        localStorage.setItem('fileNoteMap',JSON.stringify(fileNoteMap));
+        // 删除文件同步清空全局共享备注
+        delete globalFileNote[name];
+        localStorage.setItem('globalFileNote',JSON.stringify(globalFileNote));
         loadAllFiles();
     }
 
@@ -559,8 +562,9 @@ function userLogin(){
         if(arr.length === 0){ alert("请先勾选文件"); return; }
         if(!confirm(`确定删除 ${arr.length} 个文件？`)) return;
         await sb.storage.from("files").remove(arr);
-        arr.forEach(n=>delete fileNoteMap[n]);
-        localStorage.setItem('fileNoteMap',JSON.stringify(fileNoteMap));
+        // 批量删除清空全局备注
+        arr.forEach(n=>delete globalFileNote[n]);
+        localStorage.setItem('globalFileNote',JSON.stringify(globalFileNote));
         loadAllFiles();
     }
 
