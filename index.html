@@ -40,7 +40,7 @@
         .grid-item .name {margin-top:8px;font-size:13px;word-break:break-all;}
         .view-mode {display:flex;gap:6px;}
         .view-mode button {background:#eee;color:#333;}
-        .view-mode button.active {background:#409eff;color:#fff;}
+        .view-mode button.active {background:#409eff;color:#fff;border-color:#409eff;}
         a.btn-sm {padding:3px 6px;border-radius:4px;text-decoration:none;font-size:12px;color:#fff;}
         .auto-del-box{background:#fff;padding:12px;border-radius:8px;margin:15px 0;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
         .auto-del-select{padding:6px;border-radius:4px;border:1px solid #ccc;margin-right:8px;}
@@ -191,25 +191,29 @@ function userLogin(){
     }else{ alert("密码错误"); }
 }
 
-// 截取纯文件名 去除后缀
+// 获取纯文件名（去掉后缀）
 function getPureFileName(name){
     return name.lastIndexOf('.') > 0 ? name.substring(0, name.lastIndexOf('.')) : name;
 }
 
-// 单个复制纯文件名
+// 单个复制
 window.copySingleFileName = async function(filename){
-    let pureName = getPureFileName(filename);
-    await navigator.clipboard.writeText(pureName);
-    alert("复制成功：\n" + pureName);
+    try {
+        let pure = getPureFileName(filename);
+        await navigator.clipboard.writeText(pure);
+        alert("复制成功：" + pure);
+    }catch(e){ alert("复制失败") }
 }
 
-// 批量复制纯文件名 英文逗号分隔
+// 批量复制（逗号分隔）
 window.copySelectedFileNames = async function(){
     let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(arr.length === 0){ alert("请先勾选文件"); return; }
-    let pureList = arr.map(name => getPureFileName(name)).join(",");
-    await navigator.clipboard.writeText(pureList);
-    alert("批量复制成功！逗号分隔格式已复制");
+    let text = arr.map(getPureFileName).join(",");
+    try {
+        await navigator.clipboard.writeText(text);
+        alert("批量复制成功！\n" + text);
+    }catch(e){ alert("复制失败") }
 }
 
 (function() {
@@ -263,25 +267,14 @@ window.copySelectedFileNames = async function(){
         let note = el.value.trim();
         fileNotes[filename] = note;
         try {
-            const { error } = await sb.from('file_notes').upsert([
-                { file_name: filename, note: note }
-            ]);
-            if(error){
-                alert("保存失败: " + error.message);
-            }
-        } catch (e) {
-            alert("保存异常: " + e.message);
-        }
+            await sb.from('file_notes').upsert([{ file_name: filename, note: note }]);
+        } catch (e) {}
     }
 
     async function loadAllNotes() {
-        const { data, error } = await sb.from('file_notes').select('*');
-        if (!error && data) {
-            fileNotes = {};
-            data.forEach(item => {
-                fileNotes[item.file_name] = item.note;
-            });
-        }
+        const { data } = await sb.from('file_notes').select('*');
+        fileNotes = {};
+        if(data) data.forEach(item => { fileNotes[item.file_name] = item.note; });
     }
 
     function formatSize(b) {
