@@ -56,14 +56,12 @@
         .range-count{font-size:14px;color:#666;margin:6px 0;}
         .user-name-tip{color:#409eff;font-weight:bold;margin:8px 0;}
 
-        /* 上传人筛选复选框组 */
         .user-filter-group{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;}
         .user-filter-group label{font-size:13px;cursor:pointer;}
     </style>
 </head>
 <body>
 
-<!-- 登录 -->
 <div class="login-wrap" id="loginPage">
     <div class="login-box">
         <div class="login-title">系统登录</div>
@@ -80,13 +78,10 @@
     </div>
 </div>
 
-<!-- 主系统 -->
 <div class="main-container hide-page" id="mainSystem">
     <h2>📁 文件存储管理系统</h2>
     <div class="user-name-tip">当前登录人：<span id="nowLoginUser">暂无</span></div>
-    <!-- 总文件数显示 -->
     <div class="total-count" id="totalCountText">总文件数：0 个</div>
-    <!-- 时间段内文件数显示 -->
     <div class="range-count" id="rangeCountText">时间段内文件数：未选择时间范围</div>
 
     <div class="content-area">
@@ -134,7 +129,6 @@
                 <button onclick="doSearch()">🔍 搜索/刷新</button>
             </div>
 
-            <!-- 新增：上传人勾选筛选 -->
             <div class="user-filter-group">
                 <span>上传人筛选：</span>
                 <label><input type="checkbox" class="user-filter-chk" value="杜伊婷"> 杜伊婷</label>
@@ -180,15 +174,12 @@
 // ==================== 登录配置 ====================
 const FIX_PWD = "123456";
 let autoRefreshTimer;
-let currentLoginUser = ""; // 当前登录人姓名
+let currentLoginUser = "";
 
 function userLogin(){
     let userName = document.getElementById("loginUserName").value.trim();
     let pwd = document.getElementById("userPwd").value.trim();
-    if(!userName){
-        alert("请先选择登录人员姓名");
-        return;
-    }
+    if(!userName){ alert("请先选择登录人员姓名"); return; }
     if(pwd === FIX_PWD){
         currentLoginUser = userName;
         document.getElementById("nowLoginUser").innerText = userName;
@@ -196,9 +187,7 @@ function userLogin(){
         document.getElementById("mainSystem").classList.remove("hide-page");
         loadAllFiles();
         startAutoRefresh();
-    }else{
-        alert("密码错误");
-    }
+    }else{ alert("密码错误"); }
 }
 
 // ==================== 核心功能 ====================
@@ -206,6 +195,16 @@ function userLogin(){
     const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // 自动创建备注表（不存在时自动创建）
+    async function createNoteTableIfNotExists() {
+        try {
+            await sb.rpc('create_file_notes_table');
+        } catch(e) {
+            console.log('表已存在或无法创建，继续运行');
+        }
+    }
+    createNoteTableIfNotExists();
 
     let allFiles = [];
     let viewType = 'list';
@@ -215,15 +214,10 @@ function userLogin(){
     let dateEnd = '';
     let totalStorageGB = parseFloat(localStorage.getItem('totalStorageGB')) || 1;
     let autoDelDay = parseInt(localStorage.getItem('autoDelDay')) || 0;
-    
     let pageSize = parseInt(localStorage.getItem('pageSize')) || 20;
     let currentPage = 1;
     let filteredFiles = [];
-
-    // 全局共享备注，所有人互通
-    let globalFileNote = JSON.parse(localStorage.getItem('globalFileNote')) || {};
-
-    // 新增：上传人筛选数组
+    let fileNotes = {}; // 从数据库读取的共享备注
     let selectedUserFilters = [];
 
     document.getElementById('totalGB').value = totalStorageGB;
@@ -238,21 +232,16 @@ function userLogin(){
         renderFiles();
     });
 
-    // 上传人筛选勾选变化时自动刷新
     document.querySelectorAll('.user-filter-chk').forEach(chk=>{
         chk.addEventListener('change', function(){
             selectedUserFilters = Array.from(document.querySelectorAll('.user-filter-chk:checked')).map(c=>c.value);
-            currentPage = 1;
-            renderFiles();
+            currentPage = 1; renderFiles();
         });
     });
 
-    // 清空上传人筛选
     window.clearUserFilter = function(){
         document.querySelectorAll('.user-filter-chk').forEach(c=>c.checked=false);
-        selectedUserFilters = [];
-        currentPage = 1;
-        renderFiles();
+        selectedUserFilters = []; currentPage=1; renderFiles();
     }
 
     function setDelText(){
@@ -260,11 +249,22 @@ function userLogin(){
         document.getElementById('nowDelSet').innerText=map[autoDelDay];
     }
 
-    // 全局共享保存备注
-    window.saveFileNote = function(filename,el){
+    // 保存备注到数据库（真正的全局共享）
+    window.saveFileNote = async function(filename,el){
         let note = el.value.trim();
-        globalFileNote[filename] = note;
-        localStorage.setItem('globalFileNote',JSON.stringify(globalFileNote));
+        fileNotes[filename] = note;
+        await sb.from('file_notes').upsert([{file_name: filename, note: note}]);
+    }
+
+    // 从数据库读取所有备注
+    async function loadAllNotes() {
+        const { data, error } = await sb.from('file_notes').select('*');
+        if (!error && data) {
+            fileNotes = {};
+            data.forEach(item => {
+                fileNotes[item.file_name] = item.note;
+            });
+        }
     }
 
     function formatSize(b) {
@@ -298,6 +298,8 @@ function userLogin(){
         if(dl.length === 0){ alert("无过期文件"); return; }
         if(!confirm(`删除${dl.length}个文件？`)) return;
         await sb.storage.from("files").remove(dl);
+        // 删除时同步从数据库移除备注
+        await sb.from('file_notes').delete().in('file_name', dl);
         alert("清理完成");
         loadAllFiles();
     }
@@ -310,6 +312,7 @@ function userLogin(){
             let delCount = Math.ceil(sorted.length * 0.1);
             let delList = sorted.slice(0, delCount).map(i=>i.name);
             await sb.storage.from("files").remove(delList);
+            await sb.from('file_notes').delete().in('file_name', delList);
         }
     }
 
@@ -327,7 +330,6 @@ function userLogin(){
         let used = (totalBytes / 1024 / 1024).toFixed(2);
         let max = (totalStorageGB * 1024).toFixed(2);
         document.getElementById('storageProgress').style.width = pct+'%';
-        // 百分比保留两位小数
         document.getElementById('storageText').innerText = `总大小：${used} MB / 容量：${max} MB  占用：${pct.toFixed(2)}%`;
     }
 
@@ -361,7 +363,7 @@ function userLogin(){
 
     window.triggerFileUpload = () => document.getElementById("fileInput").click();
 
-    // 无感同步：只更新数据，不显示加载、不闪屏
+    // 无感同步：读取文件 + 读取数据库备注
     window.loadAllFiles = async function(isSilent = false){
         try {
             let { data, error } = await sb.storage.from("files").list();
@@ -372,8 +374,10 @@ function userLogin(){
             allFiles.forEach(i => total += i.metadata?.size || 0);
             await autoCleanWhenFull(total);
             updateTotalSpace(total);
+
+            // 每次刷新同步读取最新备注
+            await loadAllNotes();
             
-            // 只有非静默模式才刷新界面（手动点击刷新时）
             if(!isSilent){
                 renderFiles();
             }
@@ -387,31 +391,27 @@ function userLogin(){
 
         filteredFiles = allFiles.filter(f => {
             let fileName = f.name.toLowerCase();
-            let noteText = (globalFileNote[f.name] || "").toLowerCase();
+            let noteText = (fileNotes[f.name] || "").toLowerCase();
             let nameOk = true;
             let noteOk = true;
             let userOk = true;
 
-            // 文件名匹配
             if(nameKeys.length > 0){
                 nameOk = searchMode === 'fuzzy' 
                     ? nameKeys.some(k => fileName.includes(k))
                     : nameKeys.some(k => fileName === k);
             }
 
-            // 备注关键词匹配
             if(noteKeys.length > 0){
                 noteOk = searchMode === 'fuzzy'
                     ? noteKeys.some(k => noteText.includes(k))
                     : noteKeys.some(k => noteText === k);
             }
 
-            // 上传人勾选筛选
             if(selectedUserFilters.length > 0){
                 userOk = selectedUserFilters.some(user => noteText.includes(user));
             }
 
-            // 时间筛选
             let t = f.created_at || f.updated_at || '';
             let dateOk = true;
             if(dateStart && t){
@@ -456,7 +456,7 @@ function userLogin(){
                 let url = sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
                 let size = formatSize(f.metadata?.size);
                 let time = formatTime(f.created_at || f.updated_at);
-                let nowNote = globalFileNote[f.name] || "";
+                let nowNote = fileNotes[f.name] || "";
                 h += `
                 <div class="file-item">
                     <input type="checkbox" class="file-chk" value="${f.name}">
@@ -483,7 +483,7 @@ function userLogin(){
                 let isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name);
                 let size = formatSize(f.metadata?.size);
                 let time = formatTime(f.created_at || f.updated_at);
-                let nowNote = globalFileNote[f.name] || "";
+                let nowNote = fileNotes[f.name] || "";
                 h += `
                 <div class="grid-item">
                     <input type="checkbox" class="file-chk" value="${f.name}">
@@ -532,16 +532,15 @@ function userLogin(){
         renderFiles();
     }
 
-    // 上传文件自动保留填写当前登录人姓名作为备注（保留此功能）
+    // 上传文件自动填写上传人到数据库备注
     document.getElementById("fileInput").onchange = async e => {
         let fs = e.target.files;
         for(let f of fs){
             let safe = f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g, '_');
             await sb.storage.from("files").upload(safe, f);
-            // 自动写入登录人姓名到全局共享备注
-            globalFileNote[safe] = currentLoginUser;
+            // 上传时自动写入当前登录人姓名到数据库备注
+            await sb.from('file_notes').upsert([{file_name: safe, note: currentLoginUser}]);
         }
-        localStorage.setItem('globalFileNote',JSON.stringify(globalFileNote));
         alert("上传成功，已自动填写上传人姓名备注");
         e.target.value = "";
         currentPage = 1;
@@ -551,9 +550,8 @@ function userLogin(){
     window.delOne = async name => {
         if(!confirm("确定删除？")) return;
         await sb.storage.from("files").remove([name]);
-        // 删除文件同步清空全局共享备注
-        delete globalFileNote[name];
-        localStorage.setItem('globalFileNote',JSON.stringify(globalFileNote));
+        // 删除时同步从数据库移除备注
+        await sb.from('file_notes').delete().eq('file_name', name);
         loadAllFiles();
     }
 
@@ -562,9 +560,8 @@ function userLogin(){
         if(arr.length === 0){ alert("请先勾选文件"); return; }
         if(!confirm(`确定删除 ${arr.length} 个文件？`)) return;
         await sb.storage.from("files").remove(arr);
-        // 批量删除清空全局备注
-        arr.forEach(n=>delete globalFileNote[n]);
-        localStorage.setItem('globalFileNote',JSON.stringify(globalFileNote));
+        // 批量删除时同步从数据库移除备注
+        await sb.from('file_notes').delete().in('file_name', arr);
         loadAllFiles();
     }
 
@@ -581,11 +578,10 @@ function userLogin(){
     }
 })();
 
-// 无感自动同步（后台悄悄更新，不闪屏、不显示加载）
 function startAutoRefresh(){
     if(autoRefreshTimer) clearInterval(autoRefreshTimer);
     autoRefreshTimer = setInterval(() => {
-        loadAllFiles(true); // true = 静默同步，不刷新界面
+        loadAllFiles(true);
     }, 120000);
 }
 </script>
