@@ -55,6 +55,10 @@
         .total-count{font-size:15px;color:#333;margin:10px 0;font-weight:bold;}
         .range-count{font-size:14px;color:#666;margin:6px 0;}
         .user-name-tip{color:#409eff;font-weight:bold;margin:8px 0;}
+
+        /* 上传人筛选复选框组 */
+        .user-filter-group{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;}
+        .user-filter-group label{font-size:13px;cursor:pointer;}
     </style>
 </head>
 <body>
@@ -128,6 +132,17 @@
                 <input class="search" id="search" placeholder="文件名批量搜索(空格/逗号分隔)">
                 <input class="search" id="noteSearch" placeholder="备注批量搜索(空格/逗号分隔)">
                 <button onclick="doSearch()">🔍 搜索/刷新</button>
+            </div>
+
+            <!-- 新增：上传人勾选筛选 -->
+            <div class="user-filter-group">
+                <span>上传人筛选：</span>
+                <label><input type="checkbox" class="user-filter-chk" value="杜伊婷"> 杜伊婷</label>
+                <label><input type="checkbox" class="user-filter-chk" value="潘哲"> 潘哲</label>
+                <label><input type="checkbox" class="user-filter-chk" value="刘子蔚"> 刘子蔚</label>
+                <label><input type="checkbox" class="user-filter-chk" value="谷晨辉"> 谷晨辉</label>
+                <label><input type="checkbox" class="user-filter-chk" value="张之星"> 张之星</label>
+                <button onclick="clearUserFilter()">清空</button>
             </div>
 
             <div class="search-wrap">
@@ -207,6 +222,9 @@ function userLogin(){
     
     let fileNoteMap = JSON.parse(localStorage.getItem('fileNoteMap')) || {};
 
+    // 新增：上传人筛选数组
+    let selectedUserFilters = [];
+
     document.getElementById('totalGB').value = totalStorageGB;
     document.getElementById('delDaySelect').value = autoDelDay;
     document.getElementById('pageSizeSelect').value = pageSize;
@@ -218,6 +236,23 @@ function userLogin(){
         currentPage = 1;
         renderFiles();
     });
+
+    // 上传人筛选勾选变化时自动刷新
+    document.querySelectorAll('.user-filter-chk').forEach(chk=>{
+        chk.addEventListener('change', function(){
+            selectedUserFilters = Array.from(document.querySelectorAll('.user-filter-chk:checked')).map(c=>c.value);
+            currentPage = 1;
+            renderFiles();
+        });
+    });
+
+    // 清空上传人筛选
+    window.clearUserFilter = function(){
+        document.querySelectorAll('.user-filter-chk').forEach(c=>c.checked=false);
+        selectedUserFilters = [];
+        currentPage = 1;
+        renderFiles();
+    }
 
     function setDelText(){
         let map={0:'不自动删除',7:'7天前',15:'15天前',30:'30天前',60:'60天前',90:'90天前'};
@@ -346,18 +381,28 @@ function userLogin(){
             let noteText = (fileNoteMap[f.name] || "").toLowerCase();
             let nameOk = true;
             let noteOk = true;
+            let userOk = true; // 上传人筛选
 
+            // 文件名匹配
             if(nameKeys.length > 0){
                 nameOk = searchMode === 'fuzzy' 
                     ? nameKeys.some(k => fileName.includes(k))
                     : nameKeys.some(k => fileName === k);
             }
+
+            // 备注关键词匹配
             if(noteKeys.length > 0){
                 noteOk = searchMode === 'fuzzy'
                     ? noteKeys.some(k => noteText.includes(k))
                     : noteKeys.some(k => noteText === k);
             }
 
+            // 新增：上传人勾选筛选（备注包含勾选人名之一即可）
+            if(selectedUserFilters.length > 0){
+                userOk = selectedUserFilters.some(user => noteText.includes(user));
+            }
+
+            // 时间筛选
             let t = f.created_at || f.updated_at || '';
             let dateOk = true;
             if(dateStart && t){
@@ -365,7 +410,8 @@ function userLogin(){
                 if(dateStart && d < dateStart) dateOk = false;
                 if(dateEnd && d > dateEnd) dateOk = false;
             }
-            return nameOk && noteOk && dateOk;
+
+            return nameOk && noteOk && userOk && dateOk;
         });
 
         document.getElementById('totalCountText').innerText = `总文件数：${filteredFiles.length} 个`;
