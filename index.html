@@ -325,7 +325,8 @@ function userLogin(){
         let used = (totalBytes / 1024 / 1024).toFixed(2);
         let max = (totalStorageGB * 1024).toFixed(2);
         document.getElementById('storageProgress').style.width = pct+'%';
-        document.getElementById('storageText').innerText = `总大小：${used} MB / 容量：${max} MB  占用：${pct}%`;
+        // 这里修改了，百分比保留两位小数
+        document.getElementById('storageText').innerText = `总大小：${used} MB / 容量：${max} MB  占用：${pct.toFixed(2)}%`;
     }
 
     window.checkAll = () => document.querySelectorAll(".file-chk").forEach(x => x.checked = true);
