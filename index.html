@@ -358,17 +358,23 @@ function userLogin(){
 
     window.triggerFileUpload = () => document.getElementById("fileInput").click();
 
-    window.loadAllFiles = async function(){
-        let box = document.getElementById("fileBox");
-        box.innerHTML = "加载中...";
-        let { data, error } = await sb.storage.from("files").list();
-        if(error){ box.innerHTML = "加载失败："+error.message; return; }
-        allFiles = data || [];
-        let total = 0;
-        allFiles.forEach(i => total += i.metadata?.size || 0);
-        await autoCleanWhenFull(total);
-        updateTotalSpace(total);
-        renderFiles();
+    // 无感同步：只更新数据，不显示加载、不闪屏
+    window.loadAllFiles = async function(isSilent = false){
+        try {
+            let { data, error } = await sb.storage.from("files").list();
+            if(error) return;
+            
+            allFiles = data || [];
+            let total = 0;
+            allFiles.forEach(i => total += i.metadata?.size || 0);
+            await autoCleanWhenFull(total);
+            updateTotalSpace(total);
+            
+            // 只有非静默模式才刷新界面（手动点击刷新时）
+            if(!isSilent){
+                renderFiles();
+            }
+        } catch(e) {}
     }
 
     function renderFiles(){
@@ -570,10 +576,11 @@ function userLogin(){
     }
 })();
 
+// 无感自动同步（后台悄悄更新，不闪屏、不显示加载）
 function startAutoRefresh(){
     if(autoRefreshTimer) clearInterval(autoRefreshTimer);
     autoRefreshTimer = setInterval(() => {
-        loadAllFiles();
+        loadAllFiles(true); // true = 静默同步，不刷新界面
     }, 120000);
 }
 </script>
