@@ -196,16 +196,6 @@ function userLogin(){
     const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // 自动创建备注表（不存在时自动创建）
-    async function createNoteTableIfNotExists() {
-        try {
-            await sb.rpc('create_file_notes_table');
-        } catch(e) {
-            console.log('表已存在或无法创建，继续运行');
-        }
-    }
-    createNoteTableIfNotExists();
-
     let allFiles = [];
     let viewType = 'list';
     let searchTxt = '';
@@ -217,7 +207,7 @@ function userLogin(){
     let pageSize = parseInt(localStorage.getItem('pageSize')) || 20;
     let currentPage = 1;
     let filteredFiles = [];
-    let fileNotes = {}; // 从数据库读取的共享备注
+    let fileNotes = {};
     let selectedUserFilters = [];
 
     document.getElementById('totalGB').value = totalStorageGB;
@@ -249,14 +239,18 @@ function userLogin(){
         document.getElementById('nowDelSet').innerText=map[autoDelDay];
     }
 
-    // 保存备注到数据库（真正的全局共享）
+    // 修复：直接读写数据库备注，不依赖localStorage
     window.saveFileNote = async function(filename,el){
         let note = el.value.trim();
+        // 更新本地缓存
         fileNotes[filename] = note;
-        await sb.from('file_notes').upsert([{file_name: filename, note: note}]);
+        // 写入数据库
+        await sb.from('file_notes').upsert([
+            { file_name: filename, note: note }
+        ]);
     }
 
-    // 从数据库读取所有备注
+    // 从数据库读取所有备注（修复：每次刷新都强制从数据库拉取最新）
     async function loadAllNotes() {
         const { data, error } = await sb.from('file_notes').select('*');
         if (!error && data) {
@@ -298,7 +292,6 @@ function userLogin(){
         if(dl.length === 0){ alert("无过期文件"); return; }
         if(!confirm(`删除${dl.length}个文件？`)) return;
         await sb.storage.from("files").remove(dl);
-        // 删除时同步从数据库移除备注
         await sb.from('file_notes').delete().in('file_name', dl);
         alert("清理完成");
         loadAllFiles();
@@ -363,7 +356,7 @@ function userLogin(){
 
     window.triggerFileUpload = () => document.getElementById("fileInput").click();
 
-    // 无感同步：读取文件 + 读取数据库备注
+    // 修复：加载文件时同步加载数据库备注
     window.loadAllFiles = async function(isSilent = false){
         try {
             let { data, error } = await sb.storage.from("files").list();
@@ -375,13 +368,15 @@ function userLogin(){
             await autoCleanWhenFull(total);
             updateTotalSpace(total);
 
-            // 每次刷新同步读取最新备注
+            // 每次加载文件，同时强制从数据库拉取最新备注
             await loadAllNotes();
             
             if(!isSilent){
                 renderFiles();
             }
-        } catch(e) {}
+        } catch(e) {
+            console.error("加载文件/备注失败:", e);
+        }
     }
 
     function renderFiles(){
@@ -532,14 +527,16 @@ function userLogin(){
         renderFiles();
     }
 
-    // 上传文件自动填写上传人到数据库备注
+    // 修复：上传文件时自动写入数据库备注
     document.getElementById("fileInput").onchange = async e => {
         let fs = e.target.files;
         for(let f of fs){
             let safe = f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g, '_');
             await sb.storage.from("files").upload(safe, f);
             // 上传时自动写入当前登录人姓名到数据库备注
-            await sb.from('file_notes').upsert([{file_name: safe, note: currentLoginUser}]);
+            await sb.from('file_notes').upsert([
+                { file_name: safe, note: currentLoginUser }
+            ]);
         }
         alert("上传成功，已自动填写上传人姓名备注");
         e.target.value = "";
