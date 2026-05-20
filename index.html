@@ -28,6 +28,7 @@
         button {padding: 8px 14px;border: none;border-radius: 6px;background: #409eff;color: #fff;cursor: pointer;}
         button.danger {background:#f56c6c;}
         button.warn {background:#e6a23c;}
+        button.copy {background:#19b500;}
         .search-wrap {display: flex;gap: 5px;flex-wrap: wrap;align-items: center;}
         input.search, input.date-input {padding: 8px 12px;border: 1px solid #ddd;border-radius: 6px;min-width: 150px;}
         .file-item {background: #fff;padding: 10px 12px;margin: 6px 0;border-radius: 8px;display: flex;justify-content: space-between;align-items: center;flex-wrap:wrap;gap:8px;}
@@ -39,7 +40,7 @@
         .grid-item .name {margin-top:8px;font-size:13px;word-break:break-all;}
         .view-mode {display:flex;gap:6px;}
         .view-mode button {background:#eee;color:#333;}
-        .view-mode button.active {background:#409eff;color:#fff;}
+        .view-mode button.active {background:#409eff;color:#fff;border-color:#409eff;}
         a.btn-sm {padding:3px 6px;border-radius:4px;text-decoration:none;font-size:12px;color:#fff;}
         .auto-del-box{background:#fff;padding:12px;border-radius:8px;margin:15px 0;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
         .auto-del-select{padding:6px;border-radius:4px;border:1px solid #ccc;margin-right:8px;}
@@ -117,6 +118,8 @@
             <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
             <button id="batchDownload">📥 批量下载</button>
             <button id="batchDelete" class="danger">🗑️ 批量删除</button>
+            
+            <button class="copy" onclick="copySelectedFileNames()">📋 批量复制纯文件名</button>
 
             <div class="search-wrap">
                 <select class="search-type-select" id="searchType">
@@ -183,12 +186,37 @@ function userLogin(){
         document.getElementById("nowLoginUser").innerText = userName;
         document.getElementById("loginPage").classList.add("hide-page");
         document.getElementById("mainSystem").classList.remove("hide-page");
-        loadAllFiles();
-        startAutoRefresh();
+        initApp(); // 登录后再初始化应用
     }else{ alert("密码错误"); }
 }
 
-(function() {
+// 获取纯文件名（去掉后缀）
+function getPureFileName(name){
+    return name.lastIndexOf('.') > 0 ? name.substring(0, name.lastIndexOf('.')) : name;
+}
+
+// 单个复制
+window.copySingleFileName = async function(filename){
+    try {
+        let pure = getPureFileName(filename);
+        await navigator.clipboard.writeText(pure);
+        alert("复制成功：" + pure);
+    }catch(e){ alert("复制失败，请重试") }
+}
+
+// 批量复制（逗号分隔）
+window.copySelectedFileNames = async function(){
+    let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+    if(arr.length === 0){ alert("请先勾选文件"); return; }
+    let text = arr.map(getPureFileName).join(",");
+    try {
+        await navigator.clipboard.writeText(text);
+        alert("批量复制成功！\n" + text);
+    }catch(e){ alert("复制失败，请重试") }
+}
+
+// 把初始化逻辑包起来，登录后再执行
+function initApp() {
     const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -235,35 +263,18 @@ function userLogin(){
         document.getElementById('nowDelSet').innerText=map[autoDelDay];
     }
 
-    // 【关键修复】带提示的保存函数，确保写入数据库
     window.saveFileNote = async function(filename,el){
         let note = el.value.trim();
         fileNotes[filename] = note;
         try {
-            const { error } = await sb.from('file_notes').upsert([
-                { file_name: filename, note: note }
-            ]);
-            if(error){
-                alert("保存失败: " + error.message);
-            }else{
-                console.log("备注保存成功:", filename, note);
-            }
-        } catch (e) {
-            alert("保存异常: " + e.message);
-        }
+            await sb.from('file_notes').upsert([{ file_name: filename, note: note }]);
+        } catch (e) {}
     }
 
     async function loadAllNotes() {
-        const { data, error } = await sb.from('file_notes').select('*');
-        if (!error && data) {
-            fileNotes = {};
-            data.forEach(item => {
-                fileNotes[item.file_name] = item.note;
-            });
-            console.log("加载备注:", fileNotes);
-        } else {
-            console.error("加载备注失败:", error);
-        }
+        const { data } = await sb.from('file_notes').select('*');
+        fileNotes = {};
+        if(data) data.forEach(item => { fileNotes[item.file_name] = item.note; });
     }
 
     function formatSize(b) {
@@ -443,7 +454,9 @@ function userLogin(){
                 <div class="file-item">
                     <input type="checkbox" class="file-chk" value="${f.name}">
                     <div class="file-info">
-                        <div>${f.name}</div>
+                        <div>${f.name} 
+                            <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-left:6px;">复制</button>
+                        </div>
                         <div class="file-size-text">大小：${size}</div>
                         <div class="file-time-text">上传时间：${time}</div>
                         <div style="margin-top:4px;">
@@ -473,6 +486,7 @@ function userLogin(){
                     <input type="checkbox" class="file-chk" value="${f.name}">
                     ${isImg ? `<img src="${url}">` : `<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
                     <div class="name">${f.name}</div>
+                    <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-top:4px;">复制纯文件名</button>
                     <div style="font-size:12px;color:#666">${size}</div>
                     <div style="font-size:11px;color:#999">${time}</div>
                     <div style="margin:4px 0;">
@@ -556,11 +570,17 @@ function userLogin(){
             a.click();
         });
     }
-})();
+
+    // 登录后再启动自动刷新
+    startAutoRefresh();
+    loadAllFiles();
+}
 
 function startAutoRefresh(){
     if(autoRefreshTimer) clearInterval(autoRefreshTimer);
-    autoRefreshTimer = setInterval(() => { loadAllFiles(true); }, 120000);
+    autoRefreshTimer = setInterval(() => { 
+        if(currentLoginUser) loadAllFiles(true); 
+    }, 120000);
 }
 </script>
 </body>
