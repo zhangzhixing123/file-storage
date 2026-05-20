@@ -13,6 +13,7 @@
         .login-box{width:320px;padding:30px;background:#fff;border-radius:10px;box-shadow:0 2px 15px rgba(0,0,0,0.1);}
         .login-title{text-align:center;font-size:20px;margin-bottom:25px;color:#333;}
         .login-input{width:100%;box-sizing:border-box;padding:12px 15px;margin:10px 0;border:1px solid #ddd;border-radius:6px;font-size:15px;}
+        .login-select{width:100%;box-sizing:border-box;padding:12px 15px;margin:10px 0;border:1px solid #ddd;border-radius:6px;font-size:15px;}
         .login-btn{width:100%;padding:12px;background:#409eff;color:#fff;border:none;border-radius:6px;font-size:16px;margin-top:15px;cursor:pointer;}
         .hide-page{display:none !important;}
 
@@ -43,7 +44,6 @@
         .auto-del-box{background:#fff;padding:12px;border-radius:8px;margin:15px 0;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
         .auto-del-select{padding:6px;border-radius:4px;border:1px solid #ccc;margin-right:8px;}
         
-        /* 分页样式 */
         .pagination{margin-top:20px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
         .page-btn{padding:6px 12px;background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer;}
         .page-btn.active{background:#409eff;color:#fff;border-color:#409eff;}
@@ -54,6 +54,7 @@
         .search-type-select{padding:8px;border-radius:6px;border:1px solid #ddd;}
         .total-count{font-size:15px;color:#333;margin:10px 0;font-weight:bold;}
         .range-count{font-size:14px;color:#666;margin:6px 0;}
+        .user-name-tip{color:#409eff;font-weight:bold;margin:8px 0;}
     </style>
 </head>
 <body>
@@ -62,7 +63,15 @@
 <div class="login-wrap" id="loginPage">
     <div class="login-box">
         <div class="login-title">系统登录</div>
-        <input class="login-input" id="userPwd" type="password" placeholder="请输入密码">
+        <select class="login-select" id="loginUserName">
+            <option value="">请选择登录人员</option>
+            <option value="杜伊婷">杜伊婷</option>
+            <option value="潘哲">潘哲</option>
+            <option value="刘子蔚">刘子蔚</option>
+            <option value="谷晨辉">谷晨辉</option>
+            <option value="张之星">张之星</option>
+        </select>
+        <input class="login-input" id="userPwd" type="password" placeholder="请输入登录密码">
         <button class="login-btn" onclick="userLogin()">立即登录</button>
     </div>
 </div>
@@ -70,11 +79,11 @@
 <!-- 主系统 -->
 <div class="main-container hide-page" id="mainSystem">
     <h2>📁 文件存储管理系统</h2>
-    
+    <div class="user-name-tip">当前登录人：<span id="nowLoginUser">暂无</span></div>
     <!-- 总文件数显示 -->
     <div class="total-count" id="totalCountText">总文件数：0 个</div>
     <!-- 时间段内文件数显示 -->
-    <div class="range-count" id="rangeCountText">时间段内文件数：-</div>
+    <div class="range-count" id="rangeCountText">时间段内文件数：未选择时间范围</div>
 
     <div class="content-area">
         <div class="storage-box">
@@ -137,7 +146,6 @@
 
         <div id="fileBox">加载中...</div>
         
-        <!-- 分页 + 每页条数选择 -->
         <div class="pagination" id="pagination">
             <span>每页显示：</span>
             <select class="page-size-select" id="pageSizeSelect">
@@ -154,13 +162,21 @@
 <input type="file" id="fileInput" multiple style="display:none">
 
 <script>
-// ==================== 登录 ====================
+// ==================== 登录配置 ====================
 const FIX_PWD = "123456";
 let autoRefreshTimer;
+let currentLoginUser = ""; // 当前登录人姓名
 
 function userLogin(){
+    let userName = document.getElementById("loginUserName").value.trim();
     let pwd = document.getElementById("userPwd").value.trim();
+    if(!userName){
+        alert("请先选择登录人员姓名");
+        return;
+    }
     if(pwd === FIX_PWD){
+        currentLoginUser = userName;
+        document.getElementById("nowLoginUser").innerText = userName;
         document.getElementById("loginPage").classList.add("hide-page");
         document.getElementById("mainSystem").classList.remove("hide-page");
         loadAllFiles();
@@ -185,20 +201,17 @@ function userLogin(){
     let totalStorageGB = parseFloat(localStorage.getItem('totalStorageGB')) || 1;
     let autoDelDay = parseInt(localStorage.getItem('autoDelDay')) || 0;
     
-    // 分页核心变量
     let pageSize = parseInt(localStorage.getItem('pageSize')) || 20;
     let currentPage = 1;
     let filteredFiles = [];
     
     let fileNoteMap = JSON.parse(localStorage.getItem('fileNoteMap')) || {};
 
-    // 初始化
     document.getElementById('totalGB').value = totalStorageGB;
     document.getElementById('delDaySelect').value = autoDelDay;
     document.getElementById('pageSizeSelect').value = pageSize;
     setDelText();
 
-    // 每页条数切换
     document.getElementById('pageSizeSelect').addEventListener('change',function(){
         pageSize = parseInt(this.value);
         localStorage.setItem('pageSize', pageSize);
@@ -290,7 +303,6 @@ function userLogin(){
         renderFiles();
     }
 
-    // 解析批量关键词
     function parseMultiKeywords(str){
         return str.trim().split(/[\s,，]+/).filter(k => k);
     }
@@ -324,9 +336,7 @@ function userLogin(){
         renderFiles();
     }
 
-    // 渲染 + 分页处理
     function renderFiles(){
-        // 1. 筛选文件
         let searchMode = document.getElementById("searchType").value;
         let nameKeys = parseMultiKeywords(searchTxt);
         let noteKeys = parseMultiKeywords(noteSearchTxt);
@@ -358,10 +368,8 @@ function userLogin(){
             return nameOk && noteOk && dateOk;
         });
 
-        // 显示总文件数
         document.getElementById('totalCountText').innerText = `总文件数：${filteredFiles.length} 个`;
 
-        // 统计【仅时间段筛选】的文件数（忽略关键词/备注）
         let rangeFiles = allFiles.filter(f => {
             let t = f.created_at || f.updated_at || '';
             if(!dateStart && !dateEnd) return true;
@@ -378,7 +386,6 @@ function userLogin(){
             document.getElementById('rangeCountText').innerText = `时间段内文件数：未选择时间范围`;
         }
 
-        // 2. 分页计算
         const totalPages = Math.ceil(filteredFiles.length / pageSize) || 1;
         if(currentPage > totalPages) currentPage = totalPages;
         const start = (currentPage - 1) * pageSize;
@@ -388,7 +395,6 @@ function userLogin(){
         let box = document.getElementById("fileBox");
         if(pageFiles.length === 0){ box.innerHTML = "无匹配文件"; renderPagination(); return; }
 
-        // 3. 列表/网格渲染
         if(viewType === 'list'){
             let h = "";
             pageFiles.forEach(f => {
@@ -443,12 +449,9 @@ function userLogin(){
             h += "</div>";
             box.innerHTML = h;
         }
-
-        // 4. 渲染分页按钮
         renderPagination();
     }
 
-    // 渲染分页条
     function renderPagination(){
         const total = filteredFiles.length;
         const totalPages = Math.ceil(total / pageSize) || 1;
@@ -456,25 +459,17 @@ function userLogin(){
         const info = document.getElementById('pageInfo');
 
         let html = '';
-        // 上一页
         html += `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>上一页</button>`;
-        
-        // 页码（最多显示10个）
         let startPage = Math.max(1, currentPage - 5);
         let endPage = Math.min(totalPages, currentPage + 4);
         for(let i=startPage; i<=endPage; i++){
             html += `<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
         }
-        
-        // 下一页
         html += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage>=totalPages?'disabled':''}>下一页</button>`;
         pager.innerHTML = html;
-
-        // 分页信息
         info.innerText = `第 ${currentPage} / ${totalPages} 页，共 ${total} 条`;
     }
 
-    // 切换页码
     window.goPage = function(page){
         const totalPages = Math.ceil(filteredFiles.length / pageSize) || 1;
         if(page < 1 || page > totalPages) return;
@@ -482,20 +477,22 @@ function userLogin(){
         renderFiles();
     }
 
-    // 上传
+    // 上传文件自动填入当前登录人姓名作为备注
     document.getElementById("fileInput").onchange = async e => {
         let fs = e.target.files;
         for(let f of fs){
             let safe = f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g, '_');
             await sb.storage.from("files").upload(safe, f);
+            // 自动保存登录人姓名到备注
+            fileNoteMap[safe] = currentLoginUser;
         }
-        alert("上传成功");
+        localStorage.setItem('fileNoteMap',JSON.stringify(fileNoteMap));
+        alert("上传成功，已自动填写上传人姓名备注");
         e.target.value = "";
         currentPage = 1;
         loadAllFiles();
     }
 
-    // 删除单个
     window.delOne = async name => {
         if(!confirm("确定删除？")) return;
         await sb.storage.from("files").remove([name]);
@@ -504,7 +501,6 @@ function userLogin(){
         loadAllFiles();
     }
 
-    // 批量删除
     document.getElementById("batchDelete").onclick = async () => {
         let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
         if(arr.length === 0){ alert("请先勾选文件"); return; }
@@ -515,7 +511,6 @@ function userLogin(){
         loadAllFiles();
     }
 
-    // 批量下载
     document.getElementById("batchDownload").onclick = () => {
         let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
         if(arr.length === 0){ alert("请先勾选文件"); return; }
@@ -529,7 +524,6 @@ function userLogin(){
     }
 })();
 
-// 自动刷新
 function startAutoRefresh(){
     if(autoRefreshTimer) clearInterval(autoRefreshTimer);
     autoRefreshTimer = setInterval(() => {
