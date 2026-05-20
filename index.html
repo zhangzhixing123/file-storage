@@ -235,17 +235,34 @@ function userLogin(){
         document.getElementById('nowDelSet').innerText=map[autoDelDay];
     }
 
+    // 【关键修复】带提示的保存函数，确保写入数据库
     window.saveFileNote = async function(filename,el){
         let note = el.value.trim();
         fileNotes[filename] = note;
-        await sb.from('file_notes').upsert([{file_name: filename, note: note}]);
+        try {
+            const { error } = await sb.from('file_notes').upsert([
+                { file_name: filename, note: note }
+            ]);
+            if(error){
+                alert("保存失败: " + error.message);
+            }else{
+                console.log("备注保存成功:", filename, note);
+            }
+        } catch (e) {
+            alert("保存异常: " + e.message);
+        }
     }
 
     async function loadAllNotes() {
         const { data, error } = await sb.from('file_notes').select('*');
         if (!error && data) {
             fileNotes = {};
-            data.forEach(item => { fileNotes[item.file_name] = item.note; });
+            data.forEach(item => {
+                fileNotes[item.file_name] = item.note;
+            });
+            console.log("加载备注:", fileNotes);
+        } else {
+            console.error("加载备注失败:", error);
         }
     }
 
@@ -353,7 +370,9 @@ function userLogin(){
             updateTotalSpace(total);
             await loadAllNotes();
             if(!isSilent) renderFiles();
-        } catch(e) {}
+        } catch(e) {
+            console.error("加载失败:", e);
+        }
     }
 
     function renderFiles(){
@@ -428,7 +447,9 @@ function userLogin(){
                         <div class="file-size-text">大小：${size}</div>
                         <div class="file-time-text">上传时间：${time}</div>
                         <div style="margin-top:4px;">
-                            <input class="note-input" placeholder="填写备注" value="${nowNote}" onblur="saveFileNote('${f.name}',this)">
+                            <input class="note-input" placeholder="填写备注" value="${nowNote}" 
+                                onblur="saveFileNote('${f.name}',this)"
+                                onkeydown="if(event.key==='Enter'){ saveFileNote('${f.name}',this); this.blur(); }">
                         </div>
                     </div>
                     <div>
@@ -455,7 +476,9 @@ function userLogin(){
                     <div style="font-size:12px;color:#666">${size}</div>
                     <div style="font-size:11px;color:#999">${time}</div>
                     <div style="margin:4px 0;">
-                        <input class="note-input" style="width:100px" placeholder="备注" value="${nowNote}" onblur="saveFileNote('${f.name}',this)">
+                        <input class="note-input" style="width:100px" placeholder="备注" value="${nowNote}" 
+                            onblur="saveFileNote('${f.name}',this)"
+                            onkeydown="if(event.key==='Enter'){ saveFileNote('${f.name}',this); this.blur(); }">
                     </div>
                     <div style="margin-top:6px;display:flex;gap:4px;justify-content:center;">
                         <a href="${url}" target="_blank" class="btn-sm" style="font-size:11px;background:#909399">预览</a>
