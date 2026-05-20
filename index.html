@@ -55,7 +55,6 @@
         .total-count{font-size:15px;color:#333;margin:10px 0;font-weight:bold;}
         .range-count{font-size:14px;color:#666;margin:6px 0;}
         .user-name-tip{color:#409eff;font-weight:bold;margin:8px 0;}
-
         .user-filter-group{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;}
         .user-filter-group label{font-size:13px;cursor:pointer;}
     </style>
@@ -171,7 +170,6 @@
 <input type="file" id="fileInput" multiple style="display:none">
 
 <script>
-// ==================== 登录配置 ====================
 const FIX_PWD = "123456";
 let autoRefreshTimer;
 let currentLoginUser = "";
@@ -190,7 +188,6 @@ function userLogin(){
     }else{ alert("密码错误"); }
 }
 
-// ==================== 核心功能 ====================
 (function() {
     const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
@@ -218,8 +215,7 @@ function userLogin(){
     document.getElementById('pageSizeSelect').addEventListener('change',function(){
         pageSize = parseInt(this.value);
         localStorage.setItem('pageSize', pageSize);
-        currentPage = 1;
-        renderFiles();
+        currentPage = 1; renderFiles();
     });
 
     document.querySelectorAll('.user-filter-chk').forEach(chk=>{
@@ -239,25 +235,17 @@ function userLogin(){
         document.getElementById('nowDelSet').innerText=map[autoDelDay];
     }
 
-    // 修复：直接读写数据库备注，不依赖localStorage
     window.saveFileNote = async function(filename,el){
         let note = el.value.trim();
-        // 更新本地缓存
         fileNotes[filename] = note;
-        // 写入数据库
-        await sb.from('file_notes').upsert([
-            { file_name: filename, note: note }
-        ]);
+        await sb.from('file_notes').upsert([{file_name: filename, note: note}]);
     }
 
-    // 从数据库读取所有备注（修复：每次刷新都强制从数据库拉取最新）
     async function loadAllNotes() {
         const { data, error } = await sb.from('file_notes').select('*');
         if (!error && data) {
             fileNotes = {};
-            data.forEach(item => {
-                fileNotes[item.file_name] = item.note;
-            });
+            data.forEach(item => { fileNotes[item.file_name] = item.note; });
         }
     }
 
@@ -343,40 +331,29 @@ function userLogin(){
     window.doSearch = async function(){
         searchTxt = document.getElementById("search").value.trim().toLowerCase();
         noteSearchTxt = document.getElementById("noteSearch").value.trim().toLowerCase();
-        currentPage = 1;
-        await loadAllFiles();
+        currentPage = 1; await loadAllFiles();
     }
 
     window.searchByDate = async function(){
         dateStart = document.getElementById("startDate").value;
         dateEnd = document.getElementById("endDate").value;
-        currentPage = 1;
-        await loadAllFiles();
+        currentPage = 1; await loadAllFiles();
     }
 
     window.triggerFileUpload = () => document.getElementById("fileInput").click();
 
-    // 修复：加载文件时同步加载数据库备注
     window.loadAllFiles = async function(isSilent = false){
         try {
             let { data, error } = await sb.storage.from("files").list();
             if(error) return;
-            
             allFiles = data || [];
             let total = 0;
             allFiles.forEach(i => total += i.metadata?.size || 0);
             await autoCleanWhenFull(total);
             updateTotalSpace(total);
-
-            // 每次加载文件，同时强制从数据库拉取最新备注
             await loadAllNotes();
-            
-            if(!isSilent){
-                renderFiles();
-            }
-        } catch(e) {
-            console.error("加载文件/备注失败:", e);
-        }
+            if(!isSilent) renderFiles();
+        } catch(e) {}
     }
 
     function renderFiles(){
@@ -392,17 +369,11 @@ function userLogin(){
             let userOk = true;
 
             if(nameKeys.length > 0){
-                nameOk = searchMode === 'fuzzy' 
-                    ? nameKeys.some(k => fileName.includes(k))
-                    : nameKeys.some(k => fileName === k);
+                nameOk = searchMode === 'fuzzy' ? nameKeys.some(k => fileName.includes(k)) : nameKeys.some(k => fileName === k);
             }
-
             if(noteKeys.length > 0){
-                noteOk = searchMode === 'fuzzy'
-                    ? noteKeys.some(k => noteText.includes(k))
-                    : noteKeys.some(k => noteText === k);
+                noteOk = searchMode === 'fuzzy' ? noteKeys.some(k => noteText.includes(k)) : noteKeys.some(k => noteText === k);
             }
-
             if(selectedUserFilters.length > 0){
                 userOk = selectedUserFilters.some(user => noteText.includes(user));
             }
@@ -414,12 +385,10 @@ function userLogin(){
                 if(dateStart && d < dateStart) dateOk = false;
                 if(dateEnd && d > dateEnd) dateOk = false;
             }
-
             return nameOk && noteOk && userOk && dateOk;
         });
 
         document.getElementById('totalCountText').innerText = `总文件数：${filteredFiles.length} 个`;
-
         let rangeFiles = allFiles.filter(f => {
             let t = f.created_at || f.updated_at || '';
             if(!dateStart && !dateEnd) return true;
@@ -430,8 +399,7 @@ function userLogin(){
             return true;
         });
         if(dateStart || dateEnd){
-            document.getElementById('rangeCountText').innerText = 
-                `时间段内文件数（${dateStart||'不限'} ~ ${dateEnd||'不限'}）：${rangeFiles.length} 个`;
+            document.getElementById('rangeCountText').innerText = `时间段内文件数（${dateStart||'不限'} ~ ${dateEnd||'不限'}）：${rangeFiles.length} 个`;
         }else{
             document.getElementById('rangeCountText').innerText = `时间段内文件数：未选择时间范围`;
         }
@@ -507,7 +475,6 @@ function userLogin(){
         const totalPages = Math.ceil(total / pageSize) || 1;
         const pager = document.getElementById('pageBtns');
         const info = document.getElementById('pageInfo');
-
         let html = '';
         html += `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>上一页</button>`;
         let startPage = Math.max(1, currentPage - 5);
@@ -523,20 +490,15 @@ function userLogin(){
     window.goPage = function(page){
         const totalPages = Math.ceil(filteredFiles.length / pageSize) || 1;
         if(page < 1 || page > totalPages) return;
-        currentPage = page;
-        renderFiles();
+        currentPage = page; renderFiles();
     }
 
-    // 修复：上传文件时自动写入数据库备注
     document.getElementById("fileInput").onchange = async e => {
         let fs = e.target.files;
         for(let f of fs){
             let safe = f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g, '_');
             await sb.storage.from("files").upload(safe, f);
-            // 上传时自动写入当前登录人姓名到数据库备注
-            await sb.from('file_notes').upsert([
-                { file_name: safe, note: currentLoginUser }
-            ]);
+            await sb.from('file_notes').upsert([{file_name: safe, note: currentLoginUser}]);
         }
         alert("上传成功，已自动填写上传人姓名备注");
         e.target.value = "";
@@ -547,7 +509,6 @@ function userLogin(){
     window.delOne = async name => {
         if(!confirm("确定删除？")) return;
         await sb.storage.from("files").remove([name]);
-        // 删除时同步从数据库移除备注
         await sb.from('file_notes').delete().eq('file_name', name);
         loadAllFiles();
     }
@@ -557,7 +518,6 @@ function userLogin(){
         if(arr.length === 0){ alert("请先勾选文件"); return; }
         if(!confirm(`确定删除 ${arr.length} 个文件？`)) return;
         await sb.storage.from("files").remove(arr);
-        // 批量删除时同步从数据库移除备注
         await sb.from('file_notes').delete().in('file_name', arr);
         loadAllFiles();
     }
@@ -577,9 +537,7 @@ function userLogin(){
 
 function startAutoRefresh(){
     if(autoRefreshTimer) clearInterval(autoRefreshTimer);
-    autoRefreshTimer = setInterval(() => {
-        loadAllFiles(true);
-    }, 120000);
+    autoRefreshTimer = setInterval(() => { loadAllFiles(true); }, 120000);
 }
 </script>
 </body>
