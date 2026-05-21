@@ -58,6 +58,7 @@
         .user-name-tip{color:#409eff;font-weight:bold;margin:8px 0;}
         .date-quick-btn {padding:6px 10px;font-size:12px;background:#e9ecef;color:#333;border:none;border-radius:4px;cursor:pointer;}
         .date-quick-btn:hover {background:#dee2e6;}
+        .uploader-checkbox-group {display: flex;gap: 8px;align-items: center;}
     </style>
 </head>
 <body>
@@ -131,19 +132,18 @@
                 <button onclick="doSearch()">🔍 搜索/刷新</button>
             </div>
 
-            <div class="search-wrap">
+            <!-- 上传人多选筛选 -->
+            <div class="search-wrap uploader-checkbox-group">
                 <span>上传人筛选：</span>
-                <select id="uploaderFilter" class="search-type-select">
-                    <option value="">全部</option>
-                    <option value="杜伊婷">杜伊婷</option>
-                    <option value="潘哲">潘哲</option>
-                    <option value="刘子蔚">刘子蔚</option>
-                    <option value="谷晨辉">谷晨辉</option>
-                    <option value="张之星">张之星</option>
-                </select>
+                <label><input type="checkbox" class="uploader-checkbox" value="杜伊婷"> 杜伊婷</label>
+                <label><input type="checkbox" class="uploader-checkbox" value="潘哲"> 潘哲</label>
+                <label><input type="checkbox" class="uploader-checkbox" value="刘子蔚"> 刘子蔚</label>
+                <label><input type="checkbox" class="uploader-checkbox" value="谷晨辉"> 谷晨辉</label>
+                <label><input type="checkbox" class="uploader-checkbox" value="张之星"> 张之星</label>
                 <button onclick="clearUploaderFilter()">清空</button>
             </div>
 
+            <!-- 时间筛选+快捷按钮 -->
             <div class="search-wrap">
                 <input type="date" class="date-input" id="dateStart">
                 <span>~</span>
@@ -198,7 +198,6 @@ let pageSize = parseInt(localStorage.getItem('pageSize')) || 20;
 let currentPage = 1;
 let filteredFiles = [];
 let fileNotes = {};
-let selectedUploader = "";
 
 function userLogin(){
     let userName = document.getElementById("loginUserName").value.trim();
@@ -252,14 +251,15 @@ function initApp() {
         currentPage = 1; renderFiles();
     });
 
-    document.getElementById('uploaderFilter').addEventListener('change', function(){
-        selectedUploader = this.value;
-        currentPage = 1; renderFiles();
+    // 上传人多选事件绑定
+    document.querySelectorAll('.uploader-checkbox').forEach(chk => {
+        chk.addEventListener('change', function(){
+            currentPage = 1; renderFiles();
+        });
     });
 
     window.clearUploaderFilter = function(){
-        document.getElementById('uploaderFilter').value = "";
-        selectedUploader = "";
+        document.querySelectorAll('.uploader-checkbox').forEach(chk => chk.checked = false);
         currentPage = 1; renderFiles();
     }
 
@@ -429,6 +429,8 @@ function renderFiles(){
     let searchMode = document.getElementById("searchType").value;
     let nameKeys = parseMultiKeywords(searchTxt);
     let noteKeys = parseMultiKeywords(noteSearchTxt);
+    // 获取选中的上传人
+    let selectedUploaders = Array.from(document.querySelectorAll('.uploader-checkbox:checked')).map(chk => chk.value);
 
     filteredFiles = allFiles.filter(f => {
         let fileName = f.name.toLowerCase();
@@ -443,8 +445,8 @@ function renderFiles(){
         if(noteKeys.length > 0){
             noteOk = searchMode === 'fuzzy' ? noteKeys.some(k => noteText.includes(k)) : noteKeys.some(k => noteText === k);
         }
-        if(selectedUploader){
-            userOk = noteText.includes(selectedUploader);
+        if(selectedUploaders.length > 0){
+            userOk = selectedUploaders.some(user => noteText.includes(user));
         }
 
         let t = f.created_at || f.updated_at || '';
