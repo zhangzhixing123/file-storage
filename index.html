@@ -58,8 +58,42 @@
         .user-name-tip{color:#409eff;font-weight:bold;margin:8px 0;}
         .user-filter-group{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;}
         .user-filter-group label{font-size:13px;cursor:pointer;}
-        .date-quick-btn {padding:6px 10px;font-size:12px;background:#e9ecef;color:#333;border:none;border-radius:4px;cursor:pointer;}
-        .date-quick-btn:hover {background:#dee2e6;}
+        
+        /* 时间筛选框美化（你要的样式） */
+        .date-filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: #fff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #eee;
+            width: fit-content;
+        }
+        .date-quick-row {
+            display: flex;
+            gap: 6px;
+        }
+        .date-input-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .date-quick-btn {
+            padding: 4px 8px;
+            font-size: 12px;
+            background: #f5f7fa;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .date-quick-btn:hover {
+            background: #e4e7ed;
+        }
+        .date-search-btn {
+            padding: 6px 10px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -143,16 +177,21 @@
                 <button onclick="clearUserFilter()">清空</button>
             </div>
 
-            <div class="search-wrap">
-                <input type="date" class="date-input" id="dateStart">
-                <span>~</span>
-                <input type="date" class="date-input" id="dateEnd">
-                <button class="date-quick-btn" onclick="setQuickDate('today')">今天</button>
-                <button class="date-quick-btn" onclick="setQuickDate('yesterday')">昨天</button>
-                <button class="date-quick-btn" onclick="setQuickDate('7')">近7天</button>
-                <button class="date-quick-btn" onclick="setQuickDate('15')">近15天</button>
-                <button class="date-quick-btn" onclick="setQuickDate('30')">近30天</button>
-                <button onclick="searchByDate()">时间搜索</button>
+            <!-- 你要的时间筛选框样式 + 快捷键 -->
+            <div class="date-filter-group">
+                <div class="date-quick-row">
+                    <button class="date-quick-btn" onclick="setQuickDate('today')">今天</button>
+                    <button class="date-quick-btn" onclick="setQuickDate('yesterday')">昨天</button>
+                    <button class="date-quick-btn" onclick="setQuickDate('7')">近7天</button>
+                    <button class="date-quick-btn" onclick="setQuickDate('15')">近15天</button>
+                    <button class="date-quick-btn" onclick="setQuickDate('30')">近30天</button>
+                </div>
+                <div class="date-input-row">
+                    <input type="date" class="date-input" id="dateStart">
+                    <span>~</span>
+                    <input type="date" class="date-input" id="dateEnd">
+                    <button class="date-search-btn" onclick="searchByDate()">时间搜索</button>
+                </div>
             </div>
 
             <div class="view-mode">
@@ -272,7 +311,7 @@ function setDelText(){
     document.getElementById('nowDelSet').innerText=map[autoDelDay];
 }
 
-// 快捷日期设置
+// 快捷日期
 window.setQuickDate = function(type){
     let today = new Date();
     let start = new Date();
@@ -414,6 +453,14 @@ window.loadAllFiles = async function(isSilent = false){
         let { data, error } = await sb.storage.from("files").list();
         if(error) return;
         allFiles = data || [];
+        
+        // 时间倒序排序（最新在最上面）
+        allFiles.sort((a, b) => {
+            let ta = a.created_at || a.updated_at || '';
+            let tb = b.created_at || b.updated_at || '';
+            return new Date(tb) - new Date(ta);
+        });
+
         let total = 0;
         allFiles.forEach(i => total += i.metadata?.size || 0);
         await autoCleanWhenFull(total);
