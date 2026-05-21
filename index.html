@@ -56,9 +56,10 @@
         .total-count{font-size:15px;color:#333;margin:10px 0;font-weight:bold;}
         .range-count{font-size:14px;color:#666;margin:6px 0;}
         .user-name-tip{color:#409eff;font-weight:bold;margin:8px 0;}
+        .user-filter-group{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;}
+        .user-filter-group label{font-size:13px;cursor:pointer;}
         .date-quick-btn {padding:6px 10px;font-size:12px;background:#e9ecef;color:#333;border:none;border-radius:4px;cursor:pointer;}
         .date-quick-btn:hover {background:#dee2e6;}
-        .uploader-checkbox-group {display: flex;gap: 8px;align-items: center;}
     </style>
 </head>
 <body>
@@ -132,18 +133,16 @@
                 <button onclick="doSearch()">🔍 搜索/刷新</button>
             </div>
 
-            <!-- 上传人多选筛选 -->
-            <div class="search-wrap uploader-checkbox-group">
+            <div class="user-filter-group">
                 <span>上传人筛选：</span>
-                <label><input type="checkbox" class="uploader-checkbox" value="杜伊婷"> 杜伊婷</label>
-                <label><input type="checkbox" class="uploader-checkbox" value="潘哲"> 潘哲</label>
-                <label><input type="checkbox" class="uploader-checkbox" value="刘子蔚"> 刘子蔚</label>
-                <label><input type="checkbox" class="uploader-checkbox" value="谷晨辉"> 谷晨辉</label>
-                <label><input type="checkbox" class="uploader-checkbox" value="张之星"> 张之星</label>
-                <button onclick="clearUploaderFilter()">清空</button>
+                <label><input type="checkbox" class="user-filter-chk" value="杜伊婷"> 杜伊婷</label>
+                <label><input type="checkbox" class="user-filter-chk" value="潘哲"> 潘哲</label>
+                <label><input type="checkbox" class="user-filter-chk" value="刘子蔚"> 刘子蔚</label>
+                <label><input type="checkbox" class="user-filter-chk" value="谷晨辉"> 谷晨辉</label>
+                <label><input type="checkbox" class="user-filter-chk" value="张之星"> 张之星</label>
+                <button onclick="clearUserFilter()">清空</button>
             </div>
 
-            <!-- 时间筛选+快捷按钮 -->
             <div class="search-wrap">
                 <input type="date" class="date-input" id="dateStart">
                 <span>~</span>
@@ -198,6 +197,7 @@ let pageSize = parseInt(localStorage.getItem('pageSize')) || 20;
 let currentPage = 1;
 let filteredFiles = [];
 let fileNotes = {};
+let selectedUserFilters = [];
 
 function userLogin(){
     let userName = document.getElementById("loginUserName").value.trim();
@@ -251,16 +251,16 @@ function initApp() {
         currentPage = 1; renderFiles();
     });
 
-    // 上传人多选事件绑定
-    document.querySelectorAll('.uploader-checkbox').forEach(chk => {
+    document.querySelectorAll('.user-filter-chk').forEach(chk=>{
         chk.addEventListener('change', function(){
+            selectedUserFilters = Array.from(document.querySelectorAll('.user-filter-chk:checked')).map(c=>c.value);
             currentPage = 1; renderFiles();
         });
     });
 
-    window.clearUploaderFilter = function(){
-        document.querySelectorAll('.uploader-checkbox').forEach(chk => chk.checked = false);
-        currentPage = 1; renderFiles();
+    window.clearUserFilter = function(){
+        document.querySelectorAll('.user-filter-chk').forEach(c=>c.checked=false);
+        selectedUserFilters = []; currentPage=1; renderFiles();
     }
 
     loadAllFiles();
@@ -429,8 +429,6 @@ function renderFiles(){
     let searchMode = document.getElementById("searchType").value;
     let nameKeys = parseMultiKeywords(searchTxt);
     let noteKeys = parseMultiKeywords(noteSearchTxt);
-    // 获取选中的上传人
-    let selectedUploaders = Array.from(document.querySelectorAll('.uploader-checkbox:checked')).map(chk => chk.value);
 
     filteredFiles = allFiles.filter(f => {
         let fileName = f.name.toLowerCase();
@@ -445,8 +443,8 @@ function renderFiles(){
         if(noteKeys.length > 0){
             noteOk = searchMode === 'fuzzy' ? noteKeys.some(k => noteText.includes(k)) : noteKeys.some(k => noteText === k);
         }
-        if(selectedUploaders.length > 0){
-            userOk = selectedUploaders.some(user => noteText.includes(user));
+        if(selectedUserFilters.length > 0){
+            userOk = selectedUserFilters.some(user => noteText.includes(user));
         }
 
         let t = f.created_at || f.updated_at || '';
