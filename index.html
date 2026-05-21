@@ -59,7 +59,7 @@
         .user-filter-group{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;}
         .user-filter-group label{font-size:13px;cursor:pointer;}
         
-        /* 时间筛选框美化（你要的样式） */
+        /* 时间筛选框美化 */
         .date-filter-group {
             display: flex;
             flex-direction: column;
@@ -86,6 +86,7 @@
             border: 1px solid #eee;
             border-radius: 4px;
             cursor: pointer;
+            color: #000; /* 字体改成黑色 */
         }
         .date-quick-btn:hover {
             background: #e4e7ed;
@@ -93,6 +94,15 @@
         .date-search-btn {
             padding: 6px 10px;
             font-size: 12px;
+        }
+        .date-clear-btn {
+            padding: 6px 10px;
+            font-size: 12px;
+            background: #f56c6c;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -177,7 +187,7 @@
                 <button onclick="clearUserFilter()">清空</button>
             </div>
 
-            <!-- 你要的时间筛选框样式 + 快捷键 -->
+            <!-- 时间筛选框：加了清空按钮，快捷键字体为黑色 -->
             <div class="date-filter-group">
                 <div class="date-quick-row">
                     <button class="date-quick-btn" onclick="setQuickDate('today')">今天</button>
@@ -191,6 +201,7 @@
                     <span>~</span>
                     <input type="date" class="date-input" id="dateEnd">
                     <button class="date-search-btn" onclick="searchByDate()">时间搜索</button>
+                    <button class="date-clear-btn" onclick="clearDateFilter()">清空</button>
                 </div>
             </div>
 
@@ -300,6 +311,15 @@ function initApp() {
     window.clearUserFilter = function(){
         document.querySelectorAll('.user-filter-chk').forEach(c=>c.checked=false);
         selectedUserFilters = []; currentPage=1; renderFiles();
+    }
+
+    // 时间清空按钮函数
+    window.clearDateFilter = function(){
+        document.getElementById('dateStart').value = '';
+        document.getElementById('dateEnd').value = '';
+        dateStart = '';
+        dateEnd = '';
+        currentPage = 1; renderFiles();
     }
 
     loadAllFiles();
