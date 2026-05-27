@@ -46,10 +46,10 @@
         .auto-del-select{padding:6px;border-radius:4px;border:1px solid #ccc;margin-right:8px;}
         
         .pagination{margin-top:20px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-        .page-btn{padding:6px 12px;background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer;}
+        .page-btn{padding:6px 12px;background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer;color:#000;}
         .page-btn.active{background:#409eff;color:#fff;border-color:#409eff;}
-        .page-info{font-size:14px;color:#666;margin-left:10px;}
-        .page-size-select{padding:6px;border-radius:4px;border:1px solid #ccc;}
+        .page-info{font-size:14px;color:#000;margin-left:10px;}
+        .page-size-select{padding:6px;border-radius:4px;border:1px solid #ccc;color:#000;}
         
         .note-input{width:120px;padding:3px;border:1px solid #ddd;border-radius:3px;font-size:12px;}
         .search-type-select{padding:8px;border-radius:6px;border:1px solid #ddd;}
@@ -91,10 +91,6 @@
         .date-quick-btn:hover {
             background: #e4e7ed;
         }
-        .date-search-btn {
-            padding: 6px 10px;
-            font-size: 12px;
-        }
         .date-clear-btn {
             padding: 6px 10px;
             font-size: 12px;
@@ -104,6 +100,8 @@
             border-radius: 4px;
             cursor: pointer;
         }
+        .batch-note-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+        .batch-note-input{padding:6px 8px;border:1px solid #ddd;border-radius:4px;width:120px;}
     </style>
 </head>
 <body>
@@ -187,7 +185,7 @@
                 <button onclick="clearUserFilter()">清空</button>
             </div>
 
-            <!-- 时间筛选框：加了清空按钮，快捷键字体为黑色 -->
+            <!-- 时间筛选框：去除时间搜索按钮，选择时间自动查询 -->
             <div class="date-filter-group">
                 <div class="date-quick-row">
                     <button class="date-quick-btn" onclick="setQuickDate('today')">今天</button>
@@ -200,9 +198,15 @@
                     <input type="date" class="date-input" id="dateStart">
                     <span>~</span>
                     <input type="date" class="date-input" id="dateEnd">
-                    <button class="date-search-btn" onclick="searchByDate()">时间搜索</button>
                     <button class="date-clear-btn" onclick="clearDateFilter()">清空</button>
                 </div>
+            </div>
+
+            <!-- 批量备注功能 -->
+            <div class="batch-note-group">
+                <input class="batch-note-input" id="batchNoteInput" placeholder="批量添加备注">
+                <button onclick="batchAddNote()">批量新增备注</button>
+                <button class="danger" onclick="batchClearNote()">批量清空备注</button>
             </div>
 
             <div class="view-mode">
@@ -313,6 +317,16 @@ function initApp() {
         selectedUserFilters = []; currentPage=1; renderFiles();
     }
 
+    // 时间筛选：选择日期自动查询
+    document.getElementById('dateStart').addEventListener('change', function(){
+        dateStart = this.value;
+        currentPage = 1; renderFiles();
+    });
+    document.getElementById('dateEnd').addEventListener('change', function(){
+        dateEnd = this.value;
+        currentPage = 1; renderFiles();
+    });
+
     // 时间清空按钮函数
     window.clearDateFilter = function(){
         document.getElementById('dateStart').value = '';
@@ -359,6 +373,11 @@ window.setQuickDate = function(type){
     const format = d => d.toISOString().split('T')[0];
     document.getElementById('dateStart').value = format(start);
     document.getElementById('dateEnd').value = format(end);
+    // 设置后自动触发查询
+    dateStart = format(start);
+    dateEnd = format(end);
+    currentPage = 1;
+    renderFiles();
 }
 
 window.saveFileNote = async function(filename,el){
@@ -367,6 +386,48 @@ window.saveFileNote = async function(filename,el){
     try {
         await sb.from('file_notes').upsert([{ file_name: filename, note: note }]);
     } catch (e) {}
+}
+
+// 单个清空备注
+window.clearSingleNote = async function(filename){
+    if(!confirm("确定清空该文件的备注吗？")) return;
+    fileNotes[filename] = "";
+    await sb.from('file_notes').upsert([{ file_name: filename, note: "" }]);
+    renderFiles();
+}
+
+// 批量新增备注（不覆盖原有内容）
+window.batchAddNote = async function(){
+    let noteText = document.getElementById('batchNoteInput').value.trim();
+    if(!noteText){ alert("请输入要添加的备注内容"); return; }
+    let selectedFiles = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+    if(selectedFiles.length === 0){ alert("请先勾选文件"); return; }
+
+    if(!confirm(`确定为选中的 ${selectedFiles.length} 个文件添加备注内容："${noteText}"？`)) return;
+
+    for(let name of selectedFiles){
+        let oldNote = fileNotes[name] || "";
+        let newNote = oldNote ? `${oldNote} ${noteText}` : noteText;
+        fileNotes[name] = newNote;
+        await sb.from('file_notes').upsert([{ file_name: name, note: newNote }]);
+    }
+    alert("批量添加备注完成！");
+    document.getElementById('batchNoteInput').value = "";
+    renderFiles();
+}
+
+// 批量清空备注
+window.batchClearNote = async function(){
+    let selectedFiles = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+    if(selectedFiles.length === 0){ alert("请先勾选文件"); return; }
+    if(!confirm(`确定清空选中的 ${selectedFiles.length} 个文件的备注吗？`)) return;
+
+    for(let name of selectedFiles){
+        fileNotes[name] = "";
+        await sb.from('file_notes').upsert([{ file_name: name, note: "" }]);
+    }
+    alert("批量清空备注完成！");
+    renderFiles();
 }
 
 async function loadAllNotes() {
@@ -457,12 +518,6 @@ function parseMultiKeywords(str){
 window.doSearch = async function(){
     searchTxt = document.getElementById("search").value.trim().toLowerCase();
     noteSearchTxt = document.getElementById("noteSearch").value.trim().toLowerCase();
-    currentPage = 1; await loadAllFiles();
-}
-
-window.searchByDate = async function(){
-    dateStart = document.getElementById("dateStart").value;
-    dateEnd = document.getElementById("dateEnd").value;
     currentPage = 1; await loadAllFiles();
 }
 
@@ -565,10 +620,11 @@ function renderFiles(){
                     </div>
                     <div class="file-size-text">大小：${size}</div>
                     <div class="file-time-text">上传时间：${time}</div>
-                    <div style="margin-top:4px;">
+                    <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
                         <input class="note-input" placeholder="填写备注" value="${nowNote}" 
                             onblur="saveFileNote('${f.name}',this)"
                             onkeydown="if(event.key==='Enter'){ saveFileNote('${f.name}',this); this.blur(); }">
+                        <button onclick="clearSingleNote('${f.name}')" style="padding:2px 6px;font-size:12px;background:#f56c6c;">清空备注</button>
                     </div>
                 </div>
                 <div>
@@ -595,10 +651,11 @@ function renderFiles(){
                 <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-top:4px;">复制纯文件名</button>
                 <div style="font-size:12px;color:#666">${size}</div>
                 <div style="font-size:11px;color:#999">${time}</div>
-                <div style="margin:4px 0;">
-                    <input class="note-input" style="width:100px" placeholder="备注" value="${nowNote}" 
+                <div style="margin:4px 0;display:flex;align-items:center;gap:4px;justify-content:center;">
+                    <input class="note-input" style="width:80px" placeholder="备注" value="${nowNote}" 
                         onblur="saveFileNote('${f.name}',this)"
                         onkeydown="if(event.key==='Enter'){ saveFileNote('${f.name}',this); this.blur(); }">
+                    <button onclick="clearSingleNote('${f.name}')" style="padding:2px 4px;font-size:11px;background:#f56c6c;">清空</button>
                 </div>
                 <div style="margin-top:6px;display:flex;gap:4px;justify-content:center;">
                     <a href="${url}" target="_blank" class="btn-sm" style="font-size:11px;background:#909399">预览</a>
