@@ -523,6 +523,7 @@ window.doSearch = async function(){
 
 window.triggerFileUpload = () => document.getElementById("fileInput").click();
 
+// 修改：自动刷新时也更新统计数据
 window.loadAllFiles = async function(isSilent = false){
     try {
         let { data, error } = await sb.storage.from("files").list();
@@ -541,7 +542,9 @@ window.loadAllFiles = async function(isSilent = false){
         await autoCleanWhenFull(total);
         updateTotalSpace(total);
         await loadAllNotes();
-        if(!isSilent) renderFiles();
+        
+        // 关键修改：自动刷新时也执行过滤和统计，更新文件总数和时间段数量
+        renderFiles();
     } catch(e) {
         console.error("加载失败:", e);
     }
