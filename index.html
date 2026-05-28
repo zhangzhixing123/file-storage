@@ -1,748 +1,230 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文件管理</title>
     <style>
-        body {font-family: Arial, sans-serif;padding: 20px;background: #f6f7f9;margin:0;}
-        .login-wrap{
-            width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;
-            background:#f6f7f9;position:fixed;top:0;left:0;z-index:9999;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
         }
-        .login-box{width:320px;padding:30px;background:#fff;border-radius:10px;box-shadow:0 2px 15px rgba(0,0,0,0.1);}
-        .login-title{text-align:center;font-size:20px;margin-bottom:25px;color:#333;}
-        .login-input{width:100%;box-sizing:border-box;padding:12px 15px;margin:10px 0;border:1px solid #ddd;border-radius:6px;font-size:15px;}
-        .login-select{width:100%;box-sizing:border-box;padding:12px 15px;margin:10px 0;border:1px solid #ddd;border-radius:6px;font-size:15px;}
-        .login-btn{width:100%;padding:12px;background:#409eff;color:#fff;border:none;border-radius:6px;font-size:16px;margin-top:15px;cursor:pointer;}
-        .hide-page{display:none !important;}
 
-        .main-container {display: block;}
-        .content-area {width: 100%;}
-        .storage-box {background:#fff;padding:15px;border-radius:8px;margin-bottom:15px;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
-        .storage-line {display:flex;align-items:center;gap:10px;margin:8px 0;flex-wrap:wrap;}
-        .storage-line input {width:80px;padding:4px;border:1px solid #ccc;border-radius:4px;}
-        .progress-bar {width:100%;height:10px;background:#eee;border-radius:5px;overflow:hidden;margin:8px 0;}
-        .progress-inner {height:100%;background:#409eff;transition:0.3s;}
-        .tool-bar {margin: 15px 0;display: flex;gap: 10px;flex-wrap: wrap;align-items: center;}
-        button {padding: 8px 14px;border: none;border-radius: 6px;background: #409eff;color: #fff;cursor: pointer;}
-        button.danger {background:#f56c6c;}
-        button.warn {background:#e6a23c;}
-        button.copy {background:#19b500;}
-        .search-wrap {display: flex;gap: 5px;flex-wrap: wrap;align-items: center;}
-        input.search, input.date-input {padding: 8px 12px;border: 1px solid #ddd;border-radius: 6px;min-width: 150px;}
-        .file-item {background: #fff;padding: 10px 12px;margin: 6px 0;border-radius: 8px;display: flex;justify-content: space-between;align-items: center;flex-wrap:wrap;gap:8px;}
-        .file-info {flex:1;min-width:200px;}
-        .file-size-text, .file-time-text {font-size:12px;color:#666;margin-top:3px;}
-        .file-grid {display: grid;grid-template-columns: repeat(3,1fr);gap:15px;margin-top:15px;}
-        .grid-item {background:#fff;padding:12px;border-radius:10px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
-        .grid-item img {width:100%;height:120px;object-fit:cover;border-radius:6px;}
-        .grid-item .name {margin-top:8px;font-size:13px;word-break:break-all;}
-        .view-mode {display:flex;gap:6px;}
-        .view-mode button {background:#eee;color:#333;}
-        .view-mode button.active {background:#409eff;color:#fff;border-color:#409eff;}
-        a.btn-sm {padding:3px 6px;border-radius:4px;text-decoration:none;font-size:12px;color:#fff;}
-        .auto-del-box{background:#fff;padding:12px;border-radius:8px;margin:15px 0;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
-        .auto-del-select{padding:6px;border-radius:4px;border:1px solid #ccc;margin-right:8px;}
-        
-        .pagination{margin-top:20px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-        .page-btn{padding:6px 12px;background:#fff;border:1px solid #ddd;border-radius:4px;cursor:pointer;color:#000;}
-        .page-btn.active{background:#409eff;color:#fff;border-color:#409eff;}
-        .page-info{font-size:14px;color:#000;margin-left:10px;}
-        .page-size-select{padding:6px;border-radius:4px;border:1px solid #ccc;color:#000;}
-        
-        .note-input{width:120px;padding:3px;border:1px solid #ddd;border-radius:3px;font-size:12px;}
-        .search-type-select{padding:8px;border-radius:6px;border:1px solid #ddd;}
-        .total-count{font-size:15px;color:#333;margin:10px 0;font-weight:bold;}
-        .range-count{font-size:14px;color:#666;margin:6px 0;}
-        .user-name-tip{color:#409eff;font-weight:bold;margin:8px 0;}
-        .user-filter-group{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;}
-        .user-filter-group label{font-size:13px;cursor:pointer;}
-        
-        /* 时间筛选框美化 */
-        .date-filter-group {
+        body {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .toolbar {
             display: flex;
-            flex-direction: column;
-            gap: 6px;
-            background: #fff;
-            padding: 8px 12px;
-            border-radius: 6px;
-            border: 1px solid #eee;
-            width: fit-content;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
         }
-        .date-quick-row {
-            display: flex;
-            gap: 6px;
-        }
-        .date-input-row {
-            display: flex;
-            gap: 6px;
-            align-items: center;
-        }
-        .date-quick-btn {
-            padding: 4px 8px;
-            font-size: 12px;
-            background: #f5f7fa;
-            border: 1px solid #eee;
-            border-radius: 4px;
-            cursor: pointer;
-            color: #000; /* 字体改成黑色 */
-        }
-        .date-quick-btn:hover {
-            background: #e4e7ed;
-        }
-        .date-clear-btn {
-            padding: 6px 10px;
-            font-size: 12px;
-            background: #f56c6c;
-            color: #fff;
+
+        button {
+            padding: 10px 20px;
             border: none;
-            border-radius: 4px;
+            border-radius: 6px;
+            background: #409eff;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #337ecc;
+        }
+
+        .file-list {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            gap: 12px;
+        }
+
+        .file-item:last-child {
+            border-bottom: none;
+        }
+
+        .file-name {
+            flex: 1;
+            word-break: break-all;
+        }
+
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
             cursor: pointer;
         }
-        .batch-note-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-        .batch-note-input{padding:6px 8px;border:1px solid #ddd;border-radius:4px;width:120px;}
     </style>
 </head>
 <body>
-
-<div class="login-wrap" id="loginPage">
-    <div class="login-box">
-        <div class="login-title">系统登录</div>
-        <select class="login-select" id="loginUserName">
-            <option value="">请选择登录人员</option>
-            <option value="杜伊婷">杜伊婷</option>
-            <option value="潘哲">潘哲</option>
-            <option value="刘子蔚">刘子蔚</option>
-            <option value="谷晨辉">谷晨辉</option>
-            <option value="张之星">张之星</option>
-        </select>
-        <input class="login-input" id="userPwd" type="password" placeholder="请输入登录密码">
-        <button class="login-btn" onclick="userLogin()">立即登录</button>
+    <div class="toolbar">
+        <button id="uploadBtn">选择文件上传</button>
+        <button id="batchDownload">批量下载</button>
+        <button id="deleteSelected">删除选中</button>
+        <input type="file" id="fileInput" multiple style="display: none;">
     </div>
-</div>
 
-<div class="main-container hide-page" id="mainSystem">
-    <h2>📁 文件存储管理系统</h2>
-    <div class="user-name-tip">当前登录人：<span id="nowLoginUser">暂无</span></div>
-    <div class="total-count" id="totalCountText">总文件数：0 个</div>
-    <div class="range-count" id="rangeCountText">时间段内文件数：未选择时间范围</div>
-
-    <div class="content-area">
-        <div class="storage-box">
-            <div class="storage-line">
-                <span>总存储空间：</span>
-                <input type="number" id="totalGB" value="1" min="0.1" step="0.1">
-                <span>GB</span>
-                <button class="small" onclick="saveStorage()">确认修改</button>
-            </div>
-            <div class="progress-bar">
-                <div class="progress-inner" id="storageProgress"></div>
-            </div>
-            <div id="storageText">加载中...</div>
-        </div>
-
-        <div class="auto-del-box">
-            <span>自动清理过期文件：</span>
-            <select class="auto-del-select" id="delDaySelect">
-                <option value="0">不自动删除</option>
-                <option value="7">7天前文件</option>
-                <option value="15">15天前文件</option>
-                <option value="30">30天前文件</option>
-                <option value="60">60天前文件</option>
-                <option value="90">90天前文件</option>
-            </select>
-            <button class="small danger" onclick="runAutoDelete()">立即清理</button>
-            <span style="font-size:12px;color:#666;margin-left:10px;">当前：<span id="nowDelSet">不自动删除</span></span>
-        </div>
-
-        <div class="tool-bar">
-            <button onclick="triggerFileUpload()">🖼️ 上传文件/图片</button>
-            <button class="warn" onclick="checkAll()">☑ 一键全选</button>
-            <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
-            <button id="batchDownload">📥 批量下载</button>
-            <button id="batchDelete" class="danger">🗑️ 批量删除</button>
-            
-            <button class="copy" onclick="copySelectedFileNames()">📋 批量复制纯文件名</button>
-
-            <div class="search-wrap">
-                <select class="search-type-select" id="searchType">
-                    <option value="fuzzy">模糊搜索</option>
-                    <option value="exact">精确搜索</option>
-                </select>
-                <input class="search" id="search" placeholder="文件名批量搜索(空格/逗号分隔)">
-                <input class="search" id="noteSearch" placeholder="备注批量搜索(空格/逗号分隔)">
-                <button onclick="doSearch()">🔍 搜索/刷新</button>
-            </div>
-
-            <div class="user-filter-group">
-                <span>上传人筛选：</span>
-                <label><input type="checkbox" class="user-filter-chk" value="杜伊婷"> 杜伊婷</label>
-                <label><input type="checkbox" class="user-filter-chk" value="潘哲"> 潘哲</label>
-                <label><input type="checkbox" class="user-filter-chk" value="刘子蔚"> 刘子蔚</label>
-                <label><input type="checkbox" class="user-filter-chk" value="谷晨辉"> 谷晨辉</label>
-                <label><input type="checkbox" class="user-filter-chk" value="张之星"> 张之星</label>
-                <button onclick="clearUserFilter()">清空</button>
-            </div>
-
-            <!-- 时间筛选框：去除时间搜索按钮，选择时间自动查询 -->
-            <div class="date-filter-group">
-                <div class="date-quick-row">
-                    <button class="date-quick-btn" onclick="setQuickDate('today')">今天</button>
-                    <button class="date-quick-btn" onclick="setQuickDate('yesterday')">昨天</button>
-                    <button class="date-quick-btn" onclick="setQuickDate('7')">近7天</button>
-                    <button class="date-quick-btn" onclick="setQuickDate('15')">近15天</button>
-                    <button class="date-quick-btn" onclick="setQuickDate('30')">近30天</button>
-                </div>
-                <div class="date-input-row">
-                    <input type="date" class="date-input" id="dateStart">
-                    <span>~</span>
-                    <input type="date" class="date-input" id="dateEnd">
-                    <button class="date-clear-btn" onclick="clearDateFilter()">清空</button>
-                </div>
-            </div>
-
-            <!-- 批量备注功能 -->
-            <div class="batch-note-group">
-                <input class="batch-note-input" id="batchNoteInput" placeholder="批量添加备注">
-                <button onclick="batchAddNote()">批量新增备注</button>
-                <button class="danger" onclick="batchClearNote()">批量清空备注</button>
-            </div>
-
-            <div class="view-mode">
-                <button id="listBtn" class="active" onclick="changeView('list')">列表</button>
-                <button id="gridBtn" onclick="changeView('grid')">九宫格</button>
-            </div>
-        </div>
-        <hr>
-
-        <div id="fileBox">加载中...</div>
-        
-        <div class="pagination" id="pagination">
-            <span>每页显示：</span>
-            <select class="page-size-select" id="pageSizeSelect">
-                <option value="20">20条</option>
-                <option value="50">50条</option>
-                <option value="100">100条</option>
-            </select>
-            <div id="pageBtns"></div>
-            <div class="page-info" id="pageInfo"></div>
-        </div>
+    <div class="file-list" id="fileList">
+        加载中...
     </div>
-</div>
 
-<input type="file" id="fileInput" multiple style="display:none">
+    <!-- Supabase 客户端 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<script>
-const FIX_PWD = "123456";
-let autoRefreshTimer;
-let currentLoginUser = "";
+    <script>
+        // ===================== 配置区域 =====================
+        const supabaseUrl = "https://你的supabase地址.supabase.co";
+        const supabaseKey = "你的supabase公钥";
+        const bucketName = "files";
 
-let sb; 
-let allFiles = [];
-let viewType = 'list';
-let searchTxt = '';
-let noteSearchTxt = '';
-let dateStart = '';
-let dateEnd = '';
-let totalStorageGB = parseFloat(localStorage.getItem('totalStorageGB')) || 1;
-let autoDelDay = parseInt(localStorage.getItem('autoDelDay')) || 0;
-let pageSize = parseInt(localStorage.getItem('pageSize')) || 20;
-let currentPage = 1;
-let filteredFiles = [];
-let fileNotes = {};
-let selectedUserFilters = [];
+        // 初始化
+        const sb = supabase.createClient(supabaseUrl, supabaseKey);
 
-function userLogin(){
-    let userName = document.getElementById("loginUserName").value.trim();
-    let pwd = document.getElementById("userPwd").value.trim();
-    if(!userName){ alert("请先选择登录人员姓名"); return; }
-    if(pwd === FIX_PWD){
-        currentLoginUser = userName;
-        document.getElementById("nowLoginUser").innerText = userName;
-        document.getElementById("loginPage").classList.add("hide-page");
-        document.getElementById("mainSystem").classList.remove("hide-page");
-        
-        const SUPABASE_URL = 'https://ivmgttyeszqvlqnpqsrw.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_owL4oYiO_0v7tVNArUgaaA_0TUN-o0V';
-        sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        
-        initApp();
-    }else{ alert("密码错误"); }
-}
+        // 页面加载时获取文件列表
+        window.onload = fetchFiles;
 
-function getPureFileName(name){
-    return name.lastIndexOf('.') > 0 ? name.substring(0, name.lastIndexOf('.')) : name;
-}
+        // ============== 1. 获取文件列表 ==============
+        async function fetchFiles() {
+            const { data, error } = await sb.storage.from(bucketName).list();
+            if (error) {
+                alert("获取文件失败：" + error.message);
+                return;
+            }
 
-window.copySingleFileName = async function(filename){
-    try {
-        let pure = getPureFileName(filename);
-        await navigator.clipboard.writeText(pure);
-        alert("复制成功：" + pure);
-    }catch(e){ alert("复制失败，请重试") }
-}
-
-window.copySelectedFileNames = async function(){
-    let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
-    if(arr.length === 0){ alert("请先勾选文件"); return; }
-    let text = arr.map(getPureFileName).join(",");
-    try {
-        await navigator.clipboard.writeText(text);
-        alert("批量复制成功！\n" + text);
-    }catch(e){ alert("复制失败，请重试") }
-}
-
-function initApp() {
-    document.getElementById('totalGB').value = totalStorageGB;
-    document.getElementById('delDaySelect').value = autoDelDay;
-    document.getElementById('pageSizeSelect').value = pageSize;
-    setDelText();
-
-    document.getElementById('pageSizeSelect').addEventListener('change',function(){
-        pageSize = parseInt(this.value);
-        localStorage.setItem('pageSize', pageSize);
-        currentPage = 1; renderFiles();
-    });
-
-    document.querySelectorAll('.user-filter-chk').forEach(chk=>{
-        chk.addEventListener('change', function(){
-            selectedUserFilters = Array.from(document.querySelectorAll('.user-filter-chk:checked')).map(c=>c.value);
-            currentPage = 1; renderFiles();
-        });
-    });
-
-    window.clearUserFilter = function(){
-        document.querySelectorAll('.user-filter-chk').forEach(c=>c.checked=false);
-        selectedUserFilters = []; currentPage=1; renderFiles();
-    }
-
-    // 时间筛选：选择日期自动查询
-    document.getElementById('dateStart').addEventListener('change', function(){
-        dateStart = this.value;
-        currentPage = 1; renderFiles();
-    });
-    document.getElementById('dateEnd').addEventListener('change', function(){
-        dateEnd = this.value;
-        currentPage = 1; renderFiles();
-    });
-
-    // 时间清空按钮函数
-    window.clearDateFilter = function(){
-        document.getElementById('dateStart').value = '';
-        document.getElementById('dateEnd').value = '';
-        dateStart = '';
-        dateEnd = '';
-        currentPage = 1; renderFiles();
-    }
-
-    loadAllFiles();
-    startAutoRefresh();
-}
-
-function setDelText(){
-    let map={0:'不自动删除',7:'7天前',15:'15天前',30:'30天前',60:'60天前',90:'90天前'};
-    document.getElementById('nowDelSet').innerText=map[autoDelDay];
-}
-
-// 快捷日期
-window.setQuickDate = function(type){
-    let today = new Date();
-    let start = new Date();
-    let end = new Date();
-
-    switch(type){
-        case 'today':
-            start = new Date(today);
-            break;
-        case 'yesterday':
-            start.setDate(today.getDate() - 1);
-            end.setDate(today.getDate() - 1);
-            break;
-        case '7':
-            start.setDate(today.getDate() - 6);
-            break;
-        case '15':
-            start.setDate(today.getDate() - 14);
-            break;
-        case '30':
-            start.setDate(today.getDate() - 29);
-            break;
-    }
-
-    const format = d => d.toISOString().split('T')[0];
-    document.getElementById('dateStart').value = format(start);
-    document.getElementById('dateEnd').value = format(end);
-    // 设置后自动触发查询
-    dateStart = format(start);
-    dateEnd = format(end);
-    currentPage = 1;
-    renderFiles();
-}
-
-window.saveFileNote = async function(filename,el){
-    let note = el.value.trim();
-    fileNotes[filename] = note;
-    try {
-        await sb.from('file_notes').upsert([{ file_name: filename, note: note }]);
-    } catch (e) {}
-}
-
-// 单个清空备注
-window.clearSingleNote = async function(filename){
-    if(!confirm("确定清空该文件的备注吗？")) return;
-    fileNotes[filename] = "";
-    await sb.from('file_notes').upsert([{ file_name: filename, note: "" }]);
-    renderFiles();
-}
-
-// 批量新增备注（不覆盖原有内容）
-window.batchAddNote = async function(){
-    let noteText = document.getElementById('batchNoteInput').value.trim();
-    if(!noteText){ alert("请输入要添加的备注内容"); return; }
-    let selectedFiles = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
-    if(selectedFiles.length === 0){ alert("请先勾选文件"); return; }
-
-    if(!confirm(`确定为选中的 ${selectedFiles.length} 个文件添加备注内容："${noteText}"？`)) return;
-
-    for(let name of selectedFiles){
-        let oldNote = fileNotes[name] || "";
-        let newNote = oldNote ? `${oldNote} ${noteText}` : noteText;
-        fileNotes[name] = newNote;
-        await sb.from('file_notes').upsert([{ file_name: name, note: newNote }]);
-    }
-    alert("批量添加备注完成！");
-    document.getElementById('batchNoteInput').value = "";
-    renderFiles();
-}
-
-// 批量清空备注
-window.batchClearNote = async function(){
-    let selectedFiles = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
-    if(selectedFiles.length === 0){ alert("请先勾选文件"); return; }
-    if(!confirm(`确定清空选中的 ${selectedFiles.length} 个文件的备注吗？`)) return;
-
-    for(let name of selectedFiles){
-        fileNotes[name] = "";
-        await sb.from('file_notes').upsert([{ file_name: name, note: "" }]);
-    }
-    alert("批量清空备注完成！");
-    renderFiles();
-}
-
-async function loadAllNotes() {
-    const { data } = await sb.from('file_notes').select('*');
-    fileNotes = {};
-    if(data) data.forEach(item => { fileNotes[item.file_name] = item.note; });
-}
-
-function formatSize(b) {
-    if (!b) return "0 B";
-    if (b < 1024) return b + " B";
-    if (b < 1048576) return (b / 1024).toFixed(2) + " KB";
-    return (b / 1048576).toFixed(2) + " MB";
-}
-
-function formatTime(t) {
-    return t ? new Date(t).toLocaleString() : "";
-}
-
-function getBeforeDayStr(day){
-    let now = new Date();
-    now.setDate(now.getDate() - day);
-    return now.toISOString().split('T')[0];
-}
-
-document.getElementById('delDaySelect').addEventListener('change',function(){
-    autoDelDay = parseInt(this.value);
-    localStorage.setItem('autoDelDay', autoDelDay);
-    setDelText();
-})
-
-window.runAutoDelete = async function(){
-    let day = parseInt(document.getElementById('delDaySelect').value);
-    if(day === 0){ alert("请选择周期"); return; }
-    let bd = getBeforeDayStr(day);
-    let dl = allFiles.filter(i => i.created_at && i.created_at.split('T')[0] < bd).map(i => i.name);
-    if(dl.length === 0){ alert("无过期文件"); return; }
-    if(!confirm(`删除${dl.length}个文件？`)) return;
-    await sb.storage.from("files").remove(dl);
-    await sb.from('file_notes').delete().in('file_name', dl);
-    alert("清理完成");
-    loadAllFiles();
-}
-
-async function autoCleanWhenFull(totalBytes){
-    const total = totalStorageGB * 1024*1024*1024;
-    const pct = total > 0 ? (totalBytes / total * 100) : 0;
-    if(pct >= 99.9){
-        let sorted = [...allFiles].sort((a,b)=> new Date(a.created_at||0) - new Date(b.created_at||0));
-        let delCount = Math.ceil(sorted.length * 0.1);
-        let delList = sorted.slice(0, delCount).map(i=>i.name);
-        await sb.storage.from("files").remove(delList);
-        await sb.from('file_notes').delete().in('file_name', delList);
-    }
-}
-
-window.saveStorage = function(){
-    let v = parseFloat(document.getElementById('totalGB').value);
-    if(isNaN(v)||v<=0){ alert("请输入有效容量"); return; }
-    totalStorageGB = v;
-    localStorage.setItem('totalStorageGB', v);
-    loadAllFiles();
-}
-
-function updateTotalSpace(totalBytes){
-    let total = totalStorageGB * 1024*1024*1024;
-    let pct = total > 0 ? (totalBytes / total * 100) : 0;
-    let used = (totalBytes / 1024 / 1024).toFixed(2);
-    let max = (totalStorageGB * 1024).toFixed(2);
-    document.getElementById('storageProgress').style.width = pct+'%';
-    document.getElementById('storageText').innerText = `总大小：${used} MB / 容量：${max} MB  占用：${pct.toFixed(2)}%`;
-}
-
-window.checkAll = () => document.querySelectorAll(".file-chk").forEach(x => x.checked = true);
-window.unCheckAll = () => document.querySelectorAll(".file-chk").forEach(x => x.checked = false);
-
-window.changeView = (t) => {
-    viewType = t;
-    document.querySelectorAll(".view-mode button").forEach(x=>x.classList.remove("active"));
-    document.getElementById(t === 'list' ? 'listBtn' : 'gridBtn').classList.add("active");
-    renderFiles();
-}
-
-function parseMultiKeywords(str){
-    return str.trim().split(/[\s,，]+/).filter(k => k);
-}
-
-window.doSearch = async function(){
-    searchTxt = document.getElementById("search").value.trim().toLowerCase();
-    noteSearchTxt = document.getElementById("noteSearch").value.trim().toLowerCase();
-    currentPage = 1; await loadAllFiles();
-}
-
-window.triggerFileUpload = () => document.getElementById("fileInput").click();
-
-// 修改：自动刷新时也更新统计数据
-window.loadAllFiles = async function(isSilent = false){
-    try {
-        let { data, error } = await sb.storage.from("files").list();
-        if(error) return;
-        allFiles = data || [];
-        
-        // 时间倒序排序（最新在最上面）
-        allFiles.sort((a, b) => {
-            let ta = a.created_at || a.updated_at || '';
-            let tb = b.created_at || b.updated_at || '';
-            return new Date(tb) - new Date(ta);
-        });
-
-        let total = 0;
-        allFiles.forEach(i => total += i.metadata?.size || 0);
-        await autoCleanWhenFull(total);
-        updateTotalSpace(total);
-        await loadAllNotes();
-        
-        // 关键修改：自动刷新时也执行过滤和统计，更新文件总数和时间段数量
-        renderFiles();
-    } catch(e) {
-        console.error("加载失败:", e);
-    }
-}
-
-function renderFiles(){
-    let searchMode = document.getElementById("searchType").value;
-    let nameKeys = parseMultiKeywords(searchTxt);
-    let noteKeys = parseMultiKeywords(noteSearchTxt);
-
-    filteredFiles = allFiles.filter(f => {
-        let fileName = f.name.toLowerCase();
-        let noteText = (fileNotes[f.name] || "").toLowerCase();
-        let nameOk = true;
-        let noteOk = true;
-        let userOk = true;
-
-        if(nameKeys.length > 0){
-            nameOk = searchMode === 'fuzzy' ? nameKeys.some(k => fileName.includes(k)) : nameKeys.some(k => fileName === k);
-        }
-        if(noteKeys.length > 0){
-            noteOk = searchMode === 'fuzzy' ? noteKeys.some(k => noteText.includes(k)) : noteKeys.some(k => noteText === k);
-        }
-        if(selectedUserFilters.length > 0){
-            userOk = selectedUserFilters.some(user => noteText.includes(user));
+            const list = data.filter(item => item.name !== ".emptyFolderPlaceholder");
+            renderFileList(list);
         }
 
-        let t = f.created_at || f.updated_at || '';
-        let dateOk = true;
-        if(dateStart && t){
-            let d = t.split('T')[0];
-            if(dateStart && d < dateStart) dateOk = false;
-            if(dateEnd && d > dateEnd) dateOk = false;
+        // ============== 2. 渲染文件列表 ==============
+        function renderFileList(files) {
+            if (files.length === 0) {
+                document.getElementById("fileList").innerHTML = "<div style='text-align:center;padding:20px;'>暂无文件</div>";
+                return;
+            }
+
+            let html = "";
+            files.forEach(file => {
+                html += `
+                <div class="file-item">
+                    <input type="checkbox" class="file-chk" value="${file.name}">
+                    <div class="file-name">${file.name}</div>
+                    <button onclick="downloadSingle('${file.name}')">下载</button>
+                </div>`;
+            });
+            document.getElementById("fileList").innerHTML = html;
         }
-        return nameOk && noteOk && userOk && dateOk;
-    });
 
-    document.getElementById('totalCountText').innerText = `总文件数：${filteredFiles.length} 个`;
-    let rangeFiles = allFiles.filter(f => {
-        let t = f.created_at || f.updated_at || '';
-        if(!dateStart && !dateEnd) return true;
-        if(!t) return false;
-        let d = t.split('T')[0];
-        if(dateStart && d < dateStart) return false;
-        if(dateEnd && d > dateEnd) return false;
-        return true;
-    });
-    if(dateStart || dateEnd){
-        document.getElementById('rangeCountText').innerText = `时间段内文件数（${dateStart||'不限'} ~ ${dateEnd||'不限'}）：${rangeFiles.length} 个`;
-    }else{
-        document.getElementById('rangeCountText').innerText = `时间段内文件数：未选择时间范围`;
-    }
+        // ============== 3. 单个下载 ==============
+        function downloadSingle(fileName) {
+            const { data } = sb.storage.from(bucketName).getPublicUrl(fileName);
+            const a = document.createElement("a");
+            a.href = data.publicUrl;
+            a.download = fileName;
+            a.click();
+        }
 
-    const totalPages = Math.ceil(filteredFiles.length / pageSize) || 1;
-    if(currentPage > totalPages) currentPage = totalPages;
-    const start = (currentPage - 1) * pageSize;
-    const end = start + pageSize;
-    const pageFiles = filteredFiles.slice(start, end);
+        // ============== 4. 上传文件 ==============
+        document.getElementById("uploadBtn").onclick = () => {
+            document.getElementById("fileInput").click();
+        };
 
-    let box = document.getElementById("fileBox");
-    if(pageFiles.length === 0){ box.innerHTML = "无匹配文件"; renderPagination(); return; }
+        document.getElementById("fileInput").onchange = async (e) => {
+            const files = e.target.files;
+            if (!files.length) return;
 
-    if(viewType === 'list'){
-        let h = "";
-        pageFiles.forEach(f => {
-            let url = sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
-            let size = formatSize(f.metadata?.size);
-            let time = formatTime(f.created_at || f.updated_at);
-            let nowNote = fileNotes[f.name] || "";
-            h += `
-            <div class="file-item">
-                <input type="checkbox" class="file-chk" value="${f.name}">
-                <div class="file-info">
-                    <div>${f.name} 
-                        <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-left:6px;">复制</button>
-                    </div>
-                    <div class="file-size-text">大小：${size}</div>
-                    <div class="file-time-text">上传时间：${time}</div>
-                    <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
-                        <input class="note-input" placeholder="填写备注" value="${nowNote}" 
-                            onblur="saveFileNote('${f.name}',this)"
-                            onkeydown="if(event.key==='Enter'){ saveFileNote('${f.name}',this); this.blur(); }">
-                        <button onclick="clearSingleNote('${f.name}')" style="padding:2px 6px;font-size:12px;background:#f56c6c;">清空备注</button>
-                    </div>
-                </div>
-                <div>
-                    <a href="${url}" target="_blank" class="btn-sm" style="background:#909399">预览</a>
-                    <a href="${url}" download="${f.name}" class="btn-sm" style="background:#67c23a;margin:0 4px;">下载</a>
-                    <button class="small danger" onclick="delOne('${f.name}')">删除</button>
-                </div>
-            </div>`;
-        });
-        box.innerHTML = h;
-    }else{
-        let h = '<div class="file-grid">';
-        pageFiles.forEach(f => {
-            let url = sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
-            let isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name);
-            let size = formatSize(f.metadata?.size);
-            let time = formatTime(f.created_at || f.updated_at);
-            let nowNote = fileNotes[f.name] || "";
-            h += `
-            <div class="grid-item">
-                <input type="checkbox" class="file-chk" value="${f.name}">
-                ${isImg ? `<img src="${url}">` : `<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
-                <div class="name">${f.name}</div>
-                <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-top:4px;">复制纯文件名</button>
-                <div style="font-size:12px;color:#666">${size}</div>
-                <div style="font-size:11px;color:#999">${time}</div>
-                <div style="margin:4px 0;display:flex;align-items:center;gap:4px;justify-content:center;">
-                    <input class="note-input" style="width:80px" placeholder="备注" value="${nowNote}" 
-                        onblur="saveFileNote('${f.name}',this)"
-                        onkeydown="if(event.key==='Enter'){ saveFileNote('${f.name}',this); this.blur(); }">
-                    <button onclick="clearSingleNote('${f.name}')" style="padding:2px 4px;font-size:11px;background:#f56c6c;">清空</button>
-                </div>
-                <div style="margin-top:6px;display:flex;gap:4px;justify-content:center;">
-                    <a href="${url}" target="_blank" class="btn-sm" style="font-size:11px;background:#909399">预览</a>
-                    <a href="${url}" download="${f.name}" class="btn-sm" style="font-size:11px;background:#67c23a">下载</a>
-                    <button class="small danger" style="font-size:11px" onclick="delOne('${f.name}')">删除</button>
-                </div>
-            </div>`;
-        });
-        h += "</div>";
-        box.innerHTML = h;
-    }
-    renderPagination();
-}
+            for (const file of files) {
+                const { error } = await sb.storage.from(bucketName).upload(file.name, file, {
+                    upsert: false
+                });
+                if (error) {
+                    alert(`上传失败 ${file.name}: ` + error.message);
+                }
+            }
+            alert("上传完成！");
+            fetchFiles();
+        };
 
-function renderPagination(){
-    const total = filteredFiles.length;
-    const totalPages = Math.ceil(total / pageSize) || 1;
-    const pager = document.getElementById('pageBtns');
-    const info = document.getElementById('pageInfo');
-    let html = '';
-    html += `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>上一页</button>`;
-    let startPage = Math.max(1, currentPage - 5);
-    let endPage = Math.min(totalPages, currentPage + 4);
-    for(let i=startPage; i<=endPage; i++){
-        html += `<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
-    }
-    html += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage>=totalPages?'disabled':''}>下一页</button>`;
-    pager.innerHTML = html;
-    info.innerText = `第 ${currentPage} / ${totalPages} 页，共 ${total} 条`;
-}
+        // ============== 5. 删除选中 ==============
+        document.getElementById("deleteSelected").onclick = async () => {
+            const arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+            if (arr.length === 0) {
+                alert("请先勾选要删除的文件");
+                return;
+            }
+            if (!confirm("确定删除选中的 " + arr.length + " 个文件？")) return;
 
-window.goPage = function(page){
-    const totalPages = Math.ceil(filteredFiles.length / pageSize) || 1;
-    if(page < 1 || page > totalPages) return;
-    currentPage = page; renderFiles();
-}
+            const { error } = await sb.storage.from(bucketName).remove(arr);
+            if (error) {
+                alert("删除失败：" + error.message);
+                return;
+            }
+            alert("删除成功");
+            fetchFiles();
+        };
 
-document.getElementById("fileInput").onchange = async e => {
-    let fs = e.target.files;
-    for(let f of fs){
-        let safe = f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g, '_');
-        await sb.storage.from("files").upload(safe, f);
-        await sb.from('file_notes').upsert([{file_name: safe, note: currentLoginUser}]);
-    }
-    alert("上传成功，已自动填写上传人姓名备注");
-    e.target.value = "";
-    currentPage = 1;
-    loadAllFiles();
-}
+        // ============== 6. ✅ 批量下载（真正打包ZIP，支持所有文件） ==============
+        document.getElementById("batchDownload").onclick = async () => {
+            const arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+            if (arr.length === 0) {
+                alert("请先勾选文件");
+                return;
+            }
 
-window.delOne = async name => {
-    if(!confirm("确定删除？")) return;
-    await sb.storage.from("files").remove([name]);
-    await sb.from('file_notes').delete().eq('file_name', name);
-    loadAllFiles();
-}
+            try {
+                // 自动加载压缩库
+                if (typeof JSZip === 'undefined') {
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+                        script.onload = resolve;
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    });
+                }
 
-document.getElementById("batchDelete").onclick = async () => {
-    let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
-    if(arr.length === 0){ alert("请先勾选文件"); return; }
-    if(!confirm(`确定删除 ${arr.length} 个文件？`)) return;
-    await sb.storage.from("files").remove(arr);
-    await sb.from('file_notes').delete().in('file_name', arr);
-    loadAllFiles();
-}
+                const zip = new JSZip();
+                const promises = [];
 
-document.getElementById("batchDownload").onclick = () => {
-    let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
-    if(arr.length === 0){ alert("请先勾选文件"); return; }
-    arr.forEach(n => {
-        let url = sb.storage.from("files").getPublicUrl(n).data.publicUrl;
-        let a = document.createElement("a");
-        a.href = url;
-        a.download = n;
-        a.click();
-    });
-}
+                // 遍历所有选中文件加入压缩包
+                for (const name of arr) {
+                    const { data } = sb.storage.from(bucketName).getPublicUrl(name);
+                    const promise = fetch(data.publicUrl)
+                        .then(res => res.blob())
+                        .then(blob => zip.file(name, blob));
+                    promises.push(promise);
+                }
 
-function startAutoRefresh(){
-    if(autoRefreshTimer) clearInterval(autoRefreshTimer);
-    autoRefreshTimer = setInterval(() => { 
-        if(currentLoginUser) loadAllFiles(true); 
-    }, 10000);
-}
-</script>
+                await Promise.all(promises);
+
+                // 生成并下载
+                const blob = await zip.generateAsync({ type: 'blob' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `文件批量下载_${new Date().getTime()}.zip`;
+                a.click();
+
+                alert(`✅ 批量下载完成！共 ${arr.length} 个文件`);
+            } catch (err) {
+                console.error(err);
+                alert("❌ 批量下载失败");
+            }
+        };
+    </script>
 </body>
 </html>
