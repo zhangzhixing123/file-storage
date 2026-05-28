@@ -235,6 +235,9 @@
 const FIX_PWD = "123456";
 let autoRefreshTimer;
 let currentLoginUser = "";
+// 修复：标记用户是否正在操作
+let isUserOperating = false;
+let idleTimer = null;
 
 let sb; 
 let allFiles = [];
@@ -250,6 +253,20 @@ let currentPage = 1;
 let filteredFiles = [];
 let fileNotes = {};
 let selectedUserFilters = [];
+
+// 修复：标记用户正在操作，暂停自动刷新
+function startUserOperation() {
+    isUserOperating = true;
+    if (idleTimer) clearTimeout(idleTimer);
+}
+
+// 修复：用户操作结束，设置闲置计时器，3秒后恢复自动刷新
+function endUserOperation() {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+        isUserOperating = false;
+    }, 3000);
+}
 
 function userLogin(){
     let userName = document.getElementById("loginUserName").value.trim();
@@ -492,8 +509,17 @@ function updateTotalSpace(totalBytes){
     document.getElementById('storageText').innerText = `总大小：${used} MB / 容量：${max} MB  占用：${pct.toFixed(2)}%`;
 }
 
-window.checkAll = () => document.querySelectorAll(".file-chk").forEach(x => x.checked = true);
-window.unCheckAll = () => document.querySelectorAll(".file-chk").forEach(x => x.checked = false);
+// 修复：操作时标记为用户操作，结束后恢复
+window.checkAll = () => {
+    startUserOperation();
+    document.querySelectorAll(".file-chk").forEach(x => x.checked = true);
+    endUserOperation();
+};
+window.unCheckAll = () => {
+    startUserOperation();
+    document.querySelectorAll(".file-chk").forEach(x => x.checked = false);
+    endUserOperation();
+};
 
 window.changeView = (t) => {
     viewType = t;
@@ -507,14 +533,22 @@ function parseMultiKeywords(str){
 }
 
 window.doSearch = async function(){
+    startUserOperation();
     searchTxt = document.getElementById("search").value.trim().toLowerCase();
     noteSearchTxt = document.getElementById("noteSearch").value.trim().toLowerCase();
     currentPage = 1; await loadAllFiles();
+    endUserOperation();
 }
 
-window.triggerFileUpload = () => document.getElementById("fileInput").click();
+window.triggerFileUpload = () => {
+    startUserOperation();
+    document.getElementById("fileInput").click();
+}
 
 window.loadAllFiles = async function(isSilent = false){
+    // 修复：用户正在操作时，不执行自动刷新
+    if (isUserOperating && isSilent) return;
+
     try {
         let { data, error } = await sb.storage.from("files").list();
         if(error) {
@@ -608,7 +642,7 @@ function renderFiles(){
             let nowNote = fileNotes[f.name] || "";
             h += `
             <div class="file-item">
-                <input type="checkbox" class="file-chk" value="${f.name}">
+                <input type="checkbox" class="file-chk" value="${f.name}" onclick="startUserOperation(); endUserOperation();">
                 <div class="file-info">
                     <div>${f.name} 
                         <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-left:6px;">复制</button>
@@ -640,7 +674,7 @@ function renderFiles(){
             let nowNote = fileNotes[f.name] || "";
             h += `
             <div class="grid-item">
-                <input type="checkbox" class="file-chk" value="${f.name}">
+                <input type="checkbox" class="file-chk" value="${f.name}" onclick="startUserOperation(); endUserOperation();">
                 ${isImg ? `<img src="${url}">` : `<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
                 <div class="name">${f.name}</div>
                 <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-top:4px;">复制纯文件名</button>
@@ -691,7 +725,6 @@ window.goPage = function(page){
 document.getElementById("fileInput").onchange = async e => {
     let fs = e.target.files;
     for(let f of fs){
-        // 修复1：上传时自动替换文件名中的特殊字符
         let safeName = f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g, '_');
         await sb.storage.from("files").upload(safeName, f);
         await sb.from('file_notes').upsert([{file_name: safeName, note: currentLoginUser}]);
@@ -718,7 +751,6 @@ document.getElementById("batchDelete").onclick = async () => {
     loadAllFiles();
 }
 
-// 修复2：批量下载（支持中文文件名、不触发请求头错误）
 document.getElementById("batchDownload").onclick = async () => {
     let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(arr.length === 0){ alert("请先勾选文件"); return; }
@@ -739,7 +771,6 @@ document.getElementById("batchDownload").onclick = async () => {
 
         for (const name of arr) {
             const url = sb.storage.from("files").getPublicUrl(name).data.publicUrl;
-            // 修复：对URL进行编码，避免特殊字符导致请求头错误
             const encodedUrl = encodeURI(url);
             const promise = fetch(encodedUrl)
                 .then(res => res.blob())
