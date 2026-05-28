@@ -233,9 +233,13 @@
 
 <script>
 const FIX_PWD = "123456";
+// ========== 全局配置项（按需修改这里即可） ==========
+const AUTO_REFRESH_INTERVAL = 10000;  // 自动刷新间隔：10秒(单位ms)
+const IDLE_RESTORE_TIME = 30000;      // 闲置恢复自动刷新：30秒(单位ms)
+// =================================================
+
 let autoRefreshTimer;
 let currentLoginUser = "";
-// 修复：标记用户是否正在操作
 let isUserOperating = false;
 let idleTimer = null;
 
@@ -254,18 +258,16 @@ let filteredFiles = [];
 let fileNotes = {};
 let selectedUserFilters = [];
 
-// 修复：标记用户正在操作，暂停自动刷新
 function startUserOperation() {
     isUserOperating = true;
     if (idleTimer) clearTimeout(idleTimer);
 }
 
-// 修复：用户操作结束，设置闲置计时器，3秒后恢复自动刷新
 function endUserOperation() {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
         isUserOperating = false;
-    }, 3000);
+    }, IDLE_RESTORE_TIME);
 }
 
 function userLogin(){
@@ -509,7 +511,6 @@ function updateTotalSpace(totalBytes){
     document.getElementById('storageText').innerText = `总大小：${used} MB / 容量：${max} MB  占用：${pct.toFixed(2)}%`;
 }
 
-// 修复：操作时标记为用户操作，结束后恢复
 window.checkAll = () => {
     startUserOperation();
     document.querySelectorAll(".file-chk").forEach(x => x.checked = true);
@@ -546,7 +547,6 @@ window.triggerFileUpload = () => {
 }
 
 window.loadAllFiles = async function(isSilent = false){
-    // 修复：用户正在操作时，不执行自动刷新
     if (isUserOperating && isSilent) return;
 
     try {
@@ -798,7 +798,7 @@ function startAutoRefresh(){
     if(autoRefreshTimer) clearInterval(autoRefreshTimer);
     autoRefreshTimer = setInterval(() => { 
         if(currentLoginUser) loadAllFiles(true); 
-    }, 10000);
+    }, AUTO_REFRESH_INTERVAL);
 }
 </script>
 </body>
