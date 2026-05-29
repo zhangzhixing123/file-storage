@@ -233,10 +233,8 @@
 
 <script>
 const FIX_PWD = "123456";
-// ========== 全局配置项（按需修改这里即可） ==========
-const AUTO_REFRESH_INTERVAL = 10000;  // 自动刷新间隔：10秒(单位ms)
-const IDLE_RESTORE_TIME = 30000;      // 闲置恢复自动刷新：30秒(单位ms)
-// =================================================
+const AUTO_REFRESH_INTERVAL = 10000;
+const IDLE_RESTORE_TIME = 30000;
 
 let autoRefreshTimer;
 let currentLoginUser = "";
@@ -482,6 +480,7 @@ window.runAutoDelete = async function(){
     loadAllFiles();
 }
 
+// 保留原有：空间占满自动清理最早10%文件逻辑
 async function autoCleanWhenFull(totalBytes){
     const total = totalStorageGB * 1024*1024*1024;
     const pct = total > 0 ? (totalBytes / total * 100) : 0;
@@ -502,11 +501,22 @@ window.saveStorage = function(){
     loadAllFiles();
 }
 
-function updateTotalSpace(totalBytes){
-    let total = totalStorageGB * 1024*1024*1024;
-    let pct = total > 0 ? (totalBytes / total * 100) : 0;
-    let used = (totalBytes / 1024 / 1024).toFixed(2);
-    let max = (totalStorageGB * 1024).toFixed(2);
+// 从 Supabase SQL 函数获取真实存储空间，保证和后台一致
+async function updateTotalSpaceFromSQL(){
+    const { data, error } = await sb.rpc('get_bucket_total_size', { p_bucket: 'files' });
+    if (error) {
+        console.error('空间统计失败：', error);
+        return;
+    }
+    const totalBytes = data || 0;
+    // 执行空间满自动清理
+    await autoCleanWhenFull(totalBytes);
+
+    const total = totalStorageGB * 1024 * 1024 * 1024;
+    const pct = total > 0 ? (totalBytes / total * 100) : 0;
+    const used = (totalBytes / 1024 / 1024).toFixed(2);
+    const max = (totalStorageGB * 1024).toFixed(2);
+
     document.getElementById('storageProgress').style.width = pct+'%';
     document.getElementById('storageText').innerText = `总大小：${used} MB / 容量：${max} MB  占用：${pct.toFixed(2)}%`;
 }
@@ -563,10 +573,8 @@ window.loadAllFiles = async function(isSilent = false){
             return new Date(tb) - new Date(ta);
         });
 
-        let total = 0;
-        allFiles.forEach(i => total += i.metadata?.size || 0);
-        await autoCleanWhenFull(total);
-        updateTotalSpace(total);
+        // 拉取真实空间占用 + 执行自动清理
+        await updateTotalSpaceFromSQL();
         await loadAllNotes();
         
         renderFiles();
