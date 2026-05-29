@@ -59,7 +59,6 @@
         .user-filter-group{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;}
         .user-filter-group label{font-size:13px;cursor:pointer;}
         
-        /* 时间筛选框美化 */
         .date-filter-group {
             display: flex;
             flex-direction: column;
@@ -102,9 +101,29 @@
         }
         .batch-note-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
         .batch-note-input{padding:6px 8px;border:1px solid #ddd;border-radius:4px;width:120px;}
+
+        /* 强制刷新按钮 */
+        .force-refresh-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 14px 22px;
+            background: #ff3333;
+            color: #fff;
+            font-weight: bold;
+            font-size: 14px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            z-index: 99999;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        }
     </style>
 </head>
 <body>
+
+<!-- 强制刷新按钮 -->
+<button class="force-refresh-btn" onclick="forceRefreshStorage()">🔄 强制刷新存储统计</button>
 
 <div class="login-wrap" id="loginPage">
     <div class="login-box">
@@ -233,10 +252,8 @@
 
 <script>
 const FIX_PWD = "123456";
-// ========== 全局配置项（按需修改这里即可） ==========
-const AUTO_REFRESH_INTERVAL = 10000;  // 自动刷新间隔：10秒(单位ms)
-const IDLE_RESTORE_TIME = 30000;      // 闲置恢复自动刷新：30秒(单位ms)
-// =================================================
+const AUTO_REFRESH_INTERVAL = 10000;
+const IDLE_RESTORE_TIME = 30000;
 
 let autoRefreshTimer;
 let currentLoginUser = "";
@@ -257,6 +274,27 @@ let currentPage = 1;
 let filteredFiles = [];
 let fileNotes = {};
 let selectedUserFilters = [];
+
+// 强制刷新：SQL 查询 Supabase 真实存储空间
+async function getSupabaseRealStorageSize() {
+    try {
+        const { data, error } = await sb.rpc('get_bucket_size', { bucket_id: 'files' });
+        if (error) throw error;
+        return data || 0;
+    } catch (e) {
+        console.error("SQL 获取大小失败", e);
+        let total = 0;
+        allFiles.forEach(i => total += i.metadata?.size || 0);
+        return total;
+    }
+}
+
+// 强制刷新按钮
+async function forceRefreshStorage() {
+    alert("正在获取 Supabase 后台真实存储大小...");
+    await loadAllFiles();
+    alert("刷新完成！已显示后台真实大小");
+}
 
 function startUserOperation() {
     isUserOperating = true;
@@ -551,10 +589,7 @@ window.loadAllFiles = async function(isSilent = false){
 
     try {
         let { data, error } = await sb.storage.from("files").list();
-        if(error) {
-            alert("获取文件失败：" + error.message);
-            return;
-        }
+        if(error) throw error;
         allFiles = data || [];
         
         allFiles.sort((a, b) => {
@@ -563,10 +598,10 @@ window.loadAllFiles = async function(isSilent = false){
             return new Date(tb) - new Date(ta);
         });
 
-        let total = 0;
-        allFiles.forEach(i => total += i.metadata?.size || 0);
-        await autoCleanWhenFull(total);
-        updateTotalSpace(total);
+        // 用 SQL 获取真实存储大小
+        let totalBytes = await getSupabaseRealStorageSize();
+        await autoCleanWhenFull(totalBytes);
+        updateTotalSpace(totalBytes);
         await loadAllNotes();
         
         renderFiles();
