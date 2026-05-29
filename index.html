@@ -273,10 +273,10 @@ let filteredFiles = [];
 let fileNotes = {};
 let selectedUserFilters = [];
 
-// 与后台函数完全匹配：函数名 get_bucket_size，参数名 bucket_id
+// ✅ 已修复：与后台函数完全匹配（函数名 + 参数名）
 async function getRealBucketSize() {
     try {
-        const { data, error } = await sb.rpc('get_bucket_size', { bucket_id: 'files' });
+        const { data, error } = await sb.rpc('get_bucket_size', { p_bucket_id: 'files' });
         if (error) throw error;
         return data || 0;
     } catch (e) {
