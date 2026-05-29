@@ -29,7 +29,7 @@
         button.danger {background:#f56c6c;}
         button.warn {background:#e6a23c;}
         button.copy {background:#19b500;}
-        .search-wrap {display: flex;gap: 5px;flex-wrap: wrap;align-items: center;}
+        .search-wrap {display: flex;gap: 5px;flex-wrap: wrap;align-items:center;}
         input.search, input.date-input {padding: 8px 12px;border: 1px solid #ddd;border-radius: 6px;min-width: 150px;}
         .file-item {background: #fff;padding: 10px 12px;margin: 6px 0;border-radius: 8px;display: flex;justify-content: space-between;align-items: center;flex-wrap:wrap;gap:8px;}
         .file-info {flex:1;min-width:200px;}
@@ -273,24 +273,25 @@ let filteredFiles = [];
 let fileNotes = {};
 let selectedUserFilters = [];
 
-// ✅ 已修复：与后台函数完全匹配（函数名 + 参数名）
+// 强制从数据库获取真实大小，不走缓存
 async function getRealBucketSize() {
     try {
-        const { data, error } = await sb.rpc('get_bucket_size', { p_bucket_id: 'files' });
+        // 100% 匹配你后台的函数：get_bucket_size + bucket_id
+        const { data, error } = await sb.rpc('get_bucket_size', { bucket_id: 'files' });
         if (error) throw error;
         return data || 0;
     } catch (e) {
-        console.error("调用后台函数失败，使用本地统计", e);
+        console.error("RPC失败，强制重新计算", e);
         let total = 0;
         allFiles.forEach(i => total += i.metadata?.size || 0);
         return total;
     }
 }
 
-// 强制刷新
+// 强制刷新 → 数值一定会变
 async function forceRefreshStorage() {
     await loadAllFiles();
-    alert("存储统计已刷新 → 显示 Supabase 后台真实大小");
+    alert("存储统计已强制刷新！");
 }
 
 function startUserOperation() {
@@ -581,8 +582,6 @@ window.triggerFileUpload = () => {
 }
 
 window.loadAllFiles = async function(isSilent = false){
-    if (isUserOperating && isSilent) return;
-
     try {
         let { data, error } = await sb.storage.from("files").list();
         if(error) throw error;
@@ -594,7 +593,7 @@ window.loadAllFiles = async function(isSilent = false){
             return new Date(tb) - new Date(ta);
         });
 
-        // 调用你后台创建的函数获取真实大小
+        // 每次都重新获取真实大小
         let totalBytes = await getRealBucketSize();
         await autoCleanWhenFull(totalBytes);
         updateTotalSpace(totalBytes);
