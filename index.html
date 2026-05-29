@@ -273,14 +273,14 @@ let filteredFiles = [];
 let fileNotes = {};
 let selectedUserFilters = [];
 
-// 直接查询 Supabase 真实存储大小（和后台100%一致）
+// 与后台函数完全匹配：函数名 get_bucket_size，参数名 bucket_id
 async function getRealBucketSize() {
     try {
         const { data, error } = await sb.rpc('get_bucket_size', { bucket_id: 'files' });
         if (error) throw error;
         return data || 0;
     } catch (e) {
-        console.error("获取真实大小失败，使用本地统计", e);
+        console.error("调用后台函数失败，使用本地统计", e);
         let total = 0;
         allFiles.forEach(i => total += i.metadata?.size || 0);
         return total;
@@ -594,7 +594,7 @@ window.loadAllFiles = async function(isSilent = false){
             return new Date(tb) - new Date(ta);
         });
 
-        // 关键：获取真实后台大小
+        // 调用你后台创建的函数获取真实大小
         let totalBytes = await getRealBucketSize();
         await autoCleanWhenFull(totalBytes);
         updateTotalSpace(totalBytes);
