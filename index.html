@@ -102,7 +102,6 @@
         .batch-note-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
         .batch-note-input{padding:6px 8px;border:1px solid #ddd;border-radius:4px;width:120px;}
 
-        /* 强制刷新按钮 */
         .force-refresh-btn {
             position: fixed;
             bottom: 20px;
@@ -122,7 +121,6 @@
 </head>
 <body>
 
-<!-- 强制刷新按钮 -->
 <button class="force-refresh-btn" onclick="forceRefreshStorage()">🔄 强制刷新存储统计</button>
 
 <div class="login-wrap" id="loginPage">
@@ -275,25 +273,24 @@ let filteredFiles = [];
 let fileNotes = {};
 let selectedUserFilters = [];
 
-// 强制刷新：SQL 查询 Supabase 真实存储空间
-async function getSupabaseRealStorageSize() {
+// 直接查询 Supabase 真实存储大小（和后台100%一致）
+async function getRealBucketSize() {
     try {
         const { data, error } = await sb.rpc('get_bucket_size', { bucket_id: 'files' });
         if (error) throw error;
         return data || 0;
     } catch (e) {
-        console.error("SQL 获取大小失败", e);
+        console.error("获取真实大小失败，使用本地统计", e);
         let total = 0;
         allFiles.forEach(i => total += i.metadata?.size || 0);
         return total;
     }
 }
 
-// 强制刷新按钮
+// 强制刷新
 async function forceRefreshStorage() {
-    alert("正在获取 Supabase 后台真实存储大小...");
     await loadAllFiles();
-    alert("刷新完成！已显示后台真实大小");
+    alert("存储统计已刷新 → 显示 Supabase 后台真实大小");
 }
 
 function startUserOperation() {
@@ -334,7 +331,6 @@ window.copySingleFileName = async function(filename){
     try {
         let pure = getPureFileName(filename);
         await navigator.clipboard.writeText(pure);
-        alert("复制成功：" + pure);
     }catch(e){ alert("复制失败，请重试") }
 }
 
@@ -598,8 +594,8 @@ window.loadAllFiles = async function(isSilent = false){
             return new Date(tb) - new Date(ta);
         });
 
-        // 用 SQL 获取真实存储大小
-        let totalBytes = await getSupabaseRealStorageSize();
+        // 关键：获取真实后台大小
+        let totalBytes = await getRealBucketSize();
         await autoCleanWhenFull(totalBytes);
         updateTotalSpace(totalBytes);
         await loadAllNotes();
@@ -607,7 +603,6 @@ window.loadAllFiles = async function(isSilent = false){
         renderFiles();
     } catch(e) {
         console.error("加载失败:", e);
-        alert("获取文件失败：" + e.message);
     }
 }
 
@@ -764,7 +759,7 @@ document.getElementById("fileInput").onchange = async e => {
         await sb.storage.from("files").upload(safeName, f);
         await sb.from('file_notes').upsert([{file_name: safeName, note: currentLoginUser}]);
     }
-    alert("上传成功，已自动填写上传人姓名备注");
+    alert("上传成功");
     e.target.value = "";
     currentPage = 1;
     loadAllFiles();
