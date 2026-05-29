@@ -29,7 +29,7 @@
         button.danger {background:#f56c6c;}
         button.warn {background:#e6a23c;}
         button.copy {background:#19b500;}
-        .search-wrap {display: flex;gap: 5px;flex-wrap: wrap;align-items:center;}
+        .search-wrap {display: flex;gap: 5px;flex-wrap: wrap;align-items: center;}
         input.search, input.date-input {padding: 8px 12px;border: 1px solid #ddd;border-radius: 6px;min-width: 150px;}
         .file-item {background: #fff;padding: 10px 12px;margin: 6px 0;border-radius: 8px;display: flex;justify-content: space-between;align-items: center;flex-wrap:wrap;gap:8px;}
         .file-info {flex:1;min-width:200px;}
@@ -59,6 +59,7 @@
         .user-filter-group{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;}
         .user-filter-group label{font-size:13px;cursor:pointer;}
         
+        /* 时间筛选框美化 */
         .date-filter-group {
             display: flex;
             flex-direction: column;
@@ -101,27 +102,9 @@
         }
         .batch-note-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
         .batch-note-input{padding:6px 8px;border:1px solid #ddd;border-radius:4px;width:120px;}
-
-        .force-refresh-btn {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            padding: 14px 22px;
-            background: #ff3333;
-            color: #fff;
-            font-weight: bold;
-            font-size: 14px;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-            z-index: 99999;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        }
     </style>
 </head>
 <body>
-
-<button class="force-refresh-btn" onclick="forceRefreshStorage()">🔄 强制刷新存储统计</button>
 
 <div class="login-wrap" id="loginPage">
     <div class="login-box">
@@ -250,8 +233,10 @@
 
 <script>
 const FIX_PWD = "123456";
-const AUTO_REFRESH_INTERVAL = 10000;
-const IDLE_RESTORE_TIME = 30000;
+// ========== 全局配置项（按需修改这里即可） ==========
+const AUTO_REFRESH_INTERVAL = 10000;  // 自动刷新间隔：10秒(单位ms)
+const IDLE_RESTORE_TIME = 30000;      // 闲置恢复自动刷新：30秒(单位ms)
+// =================================================
 
 let autoRefreshTimer;
 let currentLoginUser = "";
@@ -272,26 +257,6 @@ let currentPage = 1;
 let filteredFiles = [];
 let fileNotes = {};
 let selectedUserFilters = [];
-
-// ✅ 100% 匹配后台函数：参数名 p_bucket_id
-async function getRealBucketSize() {
-    try {
-        const { data, error } = await sb.rpc('get_bucket_size', { p_bucket_id: 'files' });
-        if (error) throw error;
-        return data || 0;
-    } catch (e) {
-        console.error("调用后台函数失败，使用本地统计", e);
-        let total = 0;
-        allFiles.forEach(i => total += i.metadata?.size || 0);
-        return total;
-    }
-}
-
-// 强制刷新
-async function forceRefreshStorage() {
-    await loadAllFiles();
-    alert("存储统计已刷新 → 显示 Supabase 后台真实大小");
-}
 
 function startUserOperation() {
     isUserOperating = true;
@@ -331,6 +296,7 @@ window.copySingleFileName = async function(filename){
     try {
         let pure = getPureFileName(filename);
         await navigator.clipboard.writeText(pure);
+        alert("复制成功：" + pure);
     }catch(e){ alert("复制失败，请重试") }
 }
 
@@ -585,7 +551,10 @@ window.loadAllFiles = async function(isSilent = false){
 
     try {
         let { data, error } = await sb.storage.from("files").list();
-        if(error) throw error;
+        if(error) {
+            alert("获取文件失败：" + error.message);
+            return;
+        }
         allFiles = data || [];
         
         allFiles.sort((a, b) => {
@@ -594,14 +563,16 @@ window.loadAllFiles = async function(isSilent = false){
             return new Date(tb) - new Date(ta);
         });
 
-        let totalBytes = await getRealBucketSize();
-        await autoCleanWhenFull(totalBytes);
-        updateTotalSpace(totalBytes);
+        let total = 0;
+        allFiles.forEach(i => total += i.metadata?.size || 0);
+        await autoCleanWhenFull(total);
+        updateTotalSpace(total);
         await loadAllNotes();
         
         renderFiles();
     } catch(e) {
         console.error("加载失败:", e);
+        alert("获取文件失败：" + e.message);
     }
 }
 
@@ -758,7 +729,7 @@ document.getElementById("fileInput").onchange = async e => {
         await sb.storage.from("files").upload(safeName, f);
         await sb.from('file_notes').upsert([{file_name: safeName, note: currentLoginUser}]);
     }
-    alert("上传成功");
+    alert("上传成功，已自动填写上传人姓名备注");
     e.target.value = "";
     currentPage = 1;
     loadAllFiles();
