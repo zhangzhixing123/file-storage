@@ -3,10 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <!-- 禁止缓存 -->
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {font-family: Arial, sans-serif;padding: 20px;background: #f6f7f9;margin:0;}
@@ -63,6 +59,7 @@
         .user-filter-group{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;}
         .user-filter-group label{font-size:13px;cursor:pointer;}
         
+        /* 时间筛选框美化 */
         .date-filter-group {
             display: flex;
             flex-direction: column;
@@ -105,28 +102,9 @@
         }
         .batch-note-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
         .batch-note-input{padding:6px 8px;border:1px solid #ddd;border-radius:4px;width:120px;}
-
-        /* 强制刷新按钮 */
-        .force-refresh-btn {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            padding: 12px 20px;
-            background: #ff3333;
-            color: #fff;
-            font-weight: bold;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-            z-index: 99999;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        }
     </style>
 </head>
 <body>
-
-<!-- 强制刷新按钮 -->
-<button class="force-refresh-btn" onclick="forceRefreshStorage()">🔄 强制刷新存储统计</button>
 
 <div class="login-wrap" id="loginPage">
     <div class="login-box">
@@ -246,7 +224,7 @@
                 <option value="100">100条</option>
             </select>
             <div id="pageBtns"></div>
-            <div class="pageInfo"></div>
+            <div class="page-info" id="pageInfo"></div>
         </div>
     </div>
 </div>
@@ -255,8 +233,10 @@
 
 <script>
 const FIX_PWD = "123456";
-const AUTO_REFRESH_INTERVAL = 10000;
-const IDLE_RESTORE_TIME = 30000;
+// ========== 全局配置项（按需修改这里即可） ==========
+const AUTO_REFRESH_INTERVAL = 10000;  // 自动刷新间隔：10秒(单位ms)
+const IDLE_RESTORE_TIME = 30000;      // 闲置恢复自动刷新：30秒(单位ms)
+// =================================================
 
 let autoRefreshTimer;
 let currentLoginUser = "";
@@ -277,15 +257,6 @@ let currentPage = 1;
 let filteredFiles = [];
 let fileNotes = {};
 let selectedUserFilters = [];
-
-// 强制刷新存储（一键清除缓存 + 重新拉取真实数据）
-async function forceRefreshStorage() {
-    localStorage.clear();
-    sessionStorage.clear();
-    alert("正在强制刷新存储数据...");
-    await loadAllFiles();
-    alert("刷新完成！");
-}
 
 function startUserOperation() {
     isUserOperating = true;
@@ -531,20 +502,11 @@ window.saveStorage = function(){
     loadAllFiles();
 }
 
-async function updateTotalSpaceFromSQL(){
-    const { data, error } = await sb.rpc('get_bucket_total_size', { p_bucket: 'files' });
-    if (error) {
-        console.error('空间统计失败：', error);
-        return;
-    }
-    const totalBytes = data || 0;
-    await autoCleanWhenFull(totalBytes);
-
-    const total = totalStorageGB * 1024 * 1024 * 1024;
-    const pct = total > 0 ? (totalBytes / total * 100) : 0;
-    const used = (totalBytes / 1024 / 1024).toFixed(2);
-    const max = (totalStorageGB * 1024).toFixed(2);
-
+function updateTotalSpace(totalBytes){
+    let total = totalStorageGB * 1024*1024*1024;
+    let pct = total > 0 ? (totalBytes / total * 100) : 0;
+    let used = (totalBytes / 1024 / 1024).toFixed(2);
+    let max = (totalStorageGB * 1024).toFixed(2);
     document.getElementById('storageProgress').style.width = pct+'%';
     document.getElementById('storageText').innerText = `总大小：${used} MB / 容量：${max} MB  占用：${pct.toFixed(2)}%`;
 }
@@ -601,7 +563,10 @@ window.loadAllFiles = async function(isSilent = false){
             return new Date(tb) - new Date(ta);
         });
 
-        await updateTotalSpaceFromSQL();
+        let total = 0;
+        allFiles.forEach(i => total += i.metadata?.size || 0);
+        await autoCleanWhenFull(total);
+        updateTotalSpace(total);
         await loadAllNotes();
         
         renderFiles();
