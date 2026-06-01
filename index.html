@@ -485,7 +485,7 @@ window.runAutoDelete = async function(){
 async function autoCleanWhenFull(totalBytes){
     const total = totalStorageGB * 1024*1024*1024;
     const pct = total > 0 ? (totalBytes / total * 100) : 0;
-    if(pct >= 99.9){
+    if(pct >= 95){
         let sorted = [...allFiles].sort((a,b)=> new Date(a.created_at||0) - new Date(b.created_at||0));
         let delCount = Math.ceil(sorted.length * 0.1);
         let delList = sorted.slice(0, delCount).map(i=>i.name);
