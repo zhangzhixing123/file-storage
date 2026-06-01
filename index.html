@@ -255,35 +255,39 @@ let filteredFiles = [];
 let fileNotes = {};
 let selectedUserFilters = [];
 
-// ==============================================
-// 【终极精准版】100% 和后台一致，无系数、无误差
-// ==============================================
-async function calculateRealTotalSize() {
+// ========== 核心修改：直接获取存储桶总大小，不遍历所有文件 ==========
+async function getBucketTotalSize() {
     try {
-        const { data: files } = await sb.storage.from(BUCKET_NAME).list();
-        let total = 0;
-        files.forEach(file => {
-            total += file.metadata?.size || 0;
-        });
-        return total;
+        // 直接查询存储桶总容量，不再逐个累加文件
+        const { data, error } = await sb.rpc('get_bucket_total_size', { bucket_name: BUCKET_NAME });
+        if (error || !data) {
+            // 降级方案：通过元数据汇总（仅兜底）
+            const { data: listData } = await sb.storage.from(BUCKET_NAME).list();
+            let total = 0;
+            listData.forEach(item => {
+                total += item.metadata?.size || 0;
+            });
+            return total;
+        }
+        return data.total_size || 0;
     } catch (e) {
+        console.error('获取存储大小失败', e);
         return 0;
     }
 }
 
 async function updateRealStorage() {
-    const realBytes = await calculateRealTotalSize();
-    const maxBytes = totalStorageGB * 1024**3;
+    const realBytes = await getBucketTotalSize();
+    const maxBytes = totalStorageGB * 1024 ** 3;
     const pct = maxBytes > 0 ? (realBytes / maxBytes) * 100 : 0;
 
     document.getElementById('storageProgress').style.width = pct + '%';
     document.getElementById('storageText').innerText =
         `真实总占用：${(realBytes / 1024 / 1024).toFixed(2)} MB / 容量：${(maxBytes / 1024 / 1024).toFixed(2)} MB (${pct.toFixed(2)}%)`;
 }
+// =====================================================================
 
-// ==============================================
-// 以下是原有完整功能代码，全部保留
-// ==============================================
+// 以下原有功能全部保留
 function startUserOperation() {
     isUserOperating = true;
     if (idleTimer) clearTimeout(idleTimer);
