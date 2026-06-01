@@ -31,7 +31,7 @@
         button.copy {background:#19b500;}
         .search-wrap {display: flex;gap: 5px;flex-wrap: wrap;align-items: center;}
         input.search, input.date-input {padding: 8px 12px;border: 1px solid #ddd;border-radius: 6px;min-width: 150px;}
-        .file-item {background: #fff;padding: 10px 12px;margin: 6px 0;border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+        .file-item {background: #fff;padding: 10px 12px;margin: 6px 0;border-radius: 8px;display: flex;justify-content: space-between;align-items: center;flex-wrap:wrap;gap:8px;}
         .file-info {flex:1;min-width:200px;}
         .file-size-text, .file-time-text {font-size:12px;color:#666;margin-top:3px;}
         .file-grid {display: grid;grid-template-columns: repeat(3,1fr);gap:15px;margin-top:15px;}
@@ -59,6 +59,7 @@
         .user-filter-group{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;}
         .user-filter-group label{font-size:13px;cursor:pointer;}
         
+        /* 时间筛选框美化 */
         .date-filter-group {
             display: flex;
             flex-direction: column;
@@ -69,8 +70,15 @@
             border: 1px solid #eee;
             width: fit-content;
         }
-        .date-quick-row {display: flex;gap: 6px;}
-        .date-input-row {display: flex;gap: 6px;align-items: center;}
+        .date-quick-row {
+            display: flex;
+            gap: 6px;
+        }
+        .date-input-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
         .date-quick-btn {
             padding: 4px 8px;
             font-size: 12px;
@@ -80,7 +88,9 @@
             cursor: pointer;
             color: #000;
         }
-        .date-quick-btn:hover {background: #e4e7ed;}
+        .date-quick-btn:hover {
+            background: #e4e7ed;
+        }
         .date-clear-btn {
             padding: 6px 10px;
             font-size: 12px;
@@ -152,6 +162,7 @@
             <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
             <button id="batchDownload">📥 批量下载</button>
             <button id="batchDelete" class="danger">🗑️ 批量删除</button>
+            
             <button class="copy" onclick="copySelectedFileNames()">📋 批量复制纯文件名</button>
 
             <div class="search-wrap">
@@ -222,13 +233,17 @@
 
 <script>
 const FIX_PWD = "123456";
-const AUTO_REFRESH_INTERVAL = 10000;
-const IDLE_RESTORE_TIME = 30000;
+// ========== 全局配置项（按需修改这里即可） ==========
+const AUTO_REFRESH_INTERVAL = 10000;  // 自动刷新间隔：10秒(单位ms)
+const IDLE_RESTORE_TIME = 30000;      // 闲置恢复自动刷新：30秒(单位ms)
+const BUCKET_NAME = "files";          // 你的存储桶名称
+// =================================================
 
 let autoRefreshTimer;
 let currentLoginUser = "";
 let isUserOperating = false;
 let idleTimer = null;
+
 let sb; 
 let allFiles = [];
 let viewType = 'list';
@@ -247,7 +262,7 @@ let selectedUserFilters = [];
 // 真实获取存储桶总大小（SQL函数）
 async function getRealBucketSize() {
     try {
-        const { data, error } = await sb.rpc('get_bucket_size', { bucket_name: 'files' });
+        const { data, error } = await sb.rpc('get_bucket_size', { p_bucket_id: BUCKET_NAME });
         if (error) throw error;
         return data || 0;
     } catch (e) {
@@ -258,18 +273,20 @@ async function getRealBucketSize() {
 
 function startUserOperation() {
     isUserOperating = true;
-    clearTimeout(idleTimer);
+    if (idleTimer) clearTimeout(idleTimer);
 }
 
 function endUserOperation() {
-    clearTimeout(idleTimer);
-    idleTimer = setTimeout(() => isUserOperating = false, IDLE_RESTORE_TIME);
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+        isUserOperating = false;
+    }, IDLE_RESTORE_TIME);
 }
 
 function userLogin(){
     let userName = document.getElementById("loginUserName").value.trim();
     let pwd = document.getElementById("userPwd").value.trim();
-    if(!userName){ alert("请选择登录人员"); return; }
+    if(!userName){ alert("请先选择登录人员姓名"); return; }
     if(pwd === FIX_PWD){
         currentLoginUser = userName;
         document.getElementById("nowLoginUser").innerText = userName;
@@ -285,21 +302,25 @@ function userLogin(){
 }
 
 function getPureFileName(name){
-    return name.lastIndexOf('.')>0 ? name.substring(0,name.lastIndexOf('.')) : name;
+    return name.lastIndexOf('.') > 0 ? name.substring(0, name.lastIndexOf('.')) : name;
 }
 
 window.copySingleFileName = async function(filename){
     try {
-        await navigator.clipboard.writeText(getPureFileName(filename));
-        alert("复制成功");
-    }catch(e){ alert("复制失败") }
+        let pure = getPureFileName(filename);
+        await navigator.clipboard.writeText(pure);
+        alert("复制成功：" + pure);
+    }catch(e){ alert("复制失败，请重试") }
 }
 
 window.copySelectedFileNames = async function(){
-    let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x=>x.value);
-    if(arr.length===0){alert("请勾选文件");return;}
+    let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+    if(arr.length === 0){ alert("请先勾选文件"); return; }
     let text = arr.map(getPureFileName).join(",");
-    try{await navigator.clipboard.writeText(text);alert("批量复制成功");}catch{e{alert("失败")}}
+    try {
+        await navigator.clipboard.writeText(text);
+        alert("批量复制成功！\n" + text);
+    }catch(e){ alert("复制失败，请重试") }
 }
 
 function initApp() {
@@ -310,29 +331,37 @@ function initApp() {
 
     document.getElementById('pageSizeSelect').addEventListener('change',function(){
         pageSize = parseInt(this.value);
-        localStorage.setItem('pageSize',pageSize);
-        currentPage=1;renderFiles();
+        localStorage.setItem('pageSize', pageSize);
+        currentPage = 1; renderFiles();
     });
 
     document.querySelectorAll('.user-filter-chk').forEach(chk=>{
-        chk.addEventListener('change',()=>{
+        chk.addEventListener('change', function(){
             selectedUserFilters = Array.from(document.querySelectorAll('.user-filter-chk:checked')).map(c=>c.value);
-            currentPage=1;renderFiles();
+            currentPage = 1; renderFiles();
         });
     });
 
     window.clearUserFilter = function(){
         document.querySelectorAll('.user-filter-chk').forEach(c=>c.checked=false);
-        selectedUserFilters=[];currentPage=1;renderFiles();
+        selectedUserFilters = []; currentPage=1; renderFiles();
     }
 
-    document.getElementById('dateStart').addEventListener('change',()=>{dateStart=document.getElementById('dateStart').value;currentPage=1;renderFiles();});
-    document.getElementById('dateEnd').addEventListener('change',()=>{dateEnd=document.getElementById('dateEnd').value;currentPage=1;renderFiles();});
+    document.getElementById('dateStart').addEventListener('change', function(){
+        dateStart = this.value;
+        currentPage = 1; renderFiles();
+    });
+    document.getElementById('dateEnd').addEventListener('change', function(){
+        dateEnd = this.value;
+        currentPage = 1; renderFiles();
+    });
 
     window.clearDateFilter = function(){
-        document.getElementById('dateStart').value='';
-        document.getElementById('dateEnd').value='';
-        dateStart='';dateEnd='';currentPage=1;renderFiles();
+        document.getElementById('dateStart').value = '';
+        document.getElementById('dateEnd').value = '';
+        dateStart = '';
+        dateEnd = '';
+        currentPage = 1; renderFiles();
     }
 
     loadAllFiles();
@@ -348,102 +377,142 @@ window.setQuickDate = function(type){
     let today = new Date();
     let start = new Date();
     let end = new Date();
+
     switch(type){
-        case 'today':start=today;break;
-        case 'yesterday':start.setDate(today.getDate()-1);end.setDate(today.getDate()-1);break;
-        case '7':start.setDate(today.getDate()-6);break;
-        case '15':start.setDate(today.getDate()-14);break;
-        case '30':start.setDate(today.getDate()-29);break;
+        case 'today':
+            start = new Date(today);
+            break;
+        case 'yesterday':
+            start.setDate(today.getDate() - 1);
+            end.setDate(today.getDate() - 1);
+            break;
+        case '7':
+            start.setDate(today.getDate() - 6);
+            break;
+        case '15':
+            start.setDate(today.getDate() - 14);
+            break;
+        case '30':
+            start.setDate(today.getDate() - 29);
+            break;
     }
-    const f = d=>d.toISOString().split('T')[0];
-    document.getElementById('dateStart').value=f(start);
-    document.getElementById('dateEnd').value=f(end);
-    dateStart=f(start);dateEnd=f(end);currentPage=1;renderFiles();
+
+    const format = d => d.toISOString().split('T')[0];
+    document.getElementById('dateStart').value = format(start);
+    document.getElementById('dateEnd').value = format(end);
+    dateStart = format(start);
+    dateEnd = format(end);
+    currentPage = 1;
+    renderFiles();
 }
 
 window.saveFileNote = async function(filename,el){
     let note = el.value.trim();
-    fileNotes[filename]=note;
-    await sb.from('file_notes').upsert([{file_name:filename,note:note}]);
+    fileNotes[filename] = note;
+    try {
+        await sb.from('file_notes').upsert([{ file_name: filename, note: note }]);
+    } catch (e) {}
 }
 
 window.clearSingleNote = async function(filename){
-    if(!confirm("确定清空？"))return;
-    fileNotes[filename]="";
-    await sb.from('file_notes').upsert([{file_name:filename,note:""}]);
+    if(!confirm("确定清空该文件的备注吗？")) return;
+    fileNotes[filename] = "";
+    await sb.from('file_notes').upsert([{ file_name: filename, note: "" }]);
     renderFiles();
 }
 
 window.batchAddNote = async function(){
-    let t = document.getElementById('batchNoteInput').value.trim();
-    if(!t){alert("请输入内容");return;}
-    let arr = Array.from(document.querySelectorAll('.file-chk:checked')).map(x=>x.value);
-    if(arr.length===0){alert("请勾选");return;}
-    if(!confirm(`确认给${arr.length}个文件添加备注？`))return;
-    for(let n of arr){
-        let old = fileNotes[n]||"";
-        fileNotes[n] = old ? old+" "+t : t;
-        await sb.from('file_notes').upsert([{file_name:n,note:fileNotes[n]}]);
+    let noteText = document.getElementById('batchNoteInput').value.trim();
+    if(!noteText){ alert("请输入要添加的备注内容"); return; }
+    let selectedFiles = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+    if(selectedFiles.length === 0){ alert("请先勾选文件"); return; }
+
+    if(!confirm(`确定为选中的 ${selectedFiles.length} 个文件添加备注内容："${noteText}"？`)) return;
+
+    for(let name of selectedFiles){
+        let oldNote = fileNotes[name] || "";
+        let newNote = oldNote ? `${oldNote} ${noteText}` : noteText;
+        fileNotes[name] = newNote;
+        await sb.from('file_notes').upsert([{ file_name: name, note: newNote }]);
     }
-    alert("完成");
-    document.getElementById('batchNoteInput').value="";
+    alert("批量添加备注完成！");
+    document.getElementById('batchNoteInput').value = "";
     renderFiles();
 }
 
 window.batchClearNote = async function(){
-    let arr = Array.from(document.querySelectorAll('.file-chk:checked')).map(x=>x.value);
-    if(arr.length===0){alert("请勾选");return;}
-    if(!confirm("确定清空？"))return;
-    for(let n of arr){
-        fileNotes[n]="";
-        await sb.from('file_notes').upsert([{file_name:n,note:""}]);
+    let selectedFiles = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+    if(selectedFiles.length === 0){ alert("请先勾选文件"); return; }
+    if(!confirm(`确定清空选中的 ${selectedFiles.length} 个文件的备注吗？`)) return;
+
+    for(let name of selectedFiles){
+        fileNotes[name] = "";
+        await sb.from('file_notes').upsert([{ file_name: name, note: "" }]);
     }
-    alert("完成");
+    alert("批量清空备注完成！");
     renderFiles();
 }
 
-async function loadAllNotes(){
-    const {data} = await sb.from('file_notes').select('*');
-    fileNotes={};
-    if(data)data.forEach(i=>fileNotes[i.file_name]=i.note);
+async function loadAllNotes() {
+    const { data } = await sb.from('file_notes').select('*');
+    fileNotes = {};
+    if(data) data.forEach(item => { fileNotes[item.file_name] = item.note; });
 }
 
-function formatSize(b){
-    if(!b)return"0 B";if(b<1024)return b+" B";if(b<1048576)return(b/1024).toFixed(2)+" KB";return(b/1048576).toFixed(2)+" MB";
+function formatSize(b) {
+    if (!b) return "0 B";
+    if (b < 1024) return b + " B";
+    if (b < 1048576) return (b / 1024).toFixed(2) + " KB";
+    return (b / 1048576).toFixed(2) + " MB";
 }
-function formatTime(t){return t?new Date(t).toLocaleString():"";}
-function getBeforeDayStr(d){let n=new Date();n.setDate(n.getDate()-d);return n.toISOString().split('T')[0];}
+
+function formatTime(t) {
+    return t ? new Date(t).toLocaleString() : "";
+}
+
+function getBeforeDayStr(day){
+    let now = new Date();
+    now.setDate(now.getDate() - day);
+    return now.toISOString().split('T')[0];
+}
 
 document.getElementById('delDaySelect').addEventListener('change',function(){
-    autoDelDay=parseInt(this.value);localStorage.setItem('autoDelDay',autoDelDay);setDelText();
+    autoDelDay = parseInt(this.value);
+    localStorage.setItem('autoDelDay', autoDelDay);
+    setDelText();
 })
 
 window.runAutoDelete = async function(){
-    let d=parseInt(document.getElementById('delDaySelect').value);
-    if(d===0){alert("请选择周期");return;}
-    let bd=getBeforeDayStr(d);
-    let dl=allFiles.filter(i=>i.created_at&&i.created_at.split('T')[0]<bd).map(i=>i.name);
-    if(dl.length===0){alert("无过期文件");return;}
-    if(!confirm(`删除${dl.length}个？`))return;
-    await sb.storage.from('files').remove(dl);
-    await sb.from('file_notes').delete().in('file_name',dl);
-    alert("完成");loadAllFiles();
+    let day = parseInt(document.getElementById('delDaySelect').value);
+    if(day === 0){ alert("请选择周期"); return; }
+    let bd = getBeforeDayStr(day);
+    let dl = allFiles.filter(i => i.created_at && i.created_at.split('T')[0] < bd).map(i => i.name);
+    if(dl.length === 0){ alert("无过期文件"); return; }
+    if(!confirm(`删除${dl.length}个文件？`)) return;
+    await sb.storage.from("files").remove(dl);
+    await sb.from('file_notes').delete().in('file_name', dl);
+    alert("清理完成");
+    loadAllFiles();
 }
 
 async function autoCleanWhenFull(totalBytes){
-    const max=totalStorageGB*1024**3;
-    if(totalBytes/max>=0.999){
-        let sorted=[...allFiles].sort((a,b)=>new Date(a.created_at||0)-new Date(b.created_at||0));
-        let del=sorted.slice(0,Math.ceil(sorted.length*0.1)).map(i=>i.name);
-        await sb.storage.from('files').remove(del);
-        await sb.from('file_notes').delete().in('file_name',del);
+    const total = totalStorageGB * 1024*1024*1024;
+    const pct = total > 0 ? (totalBytes / total * 100) : 0;
+    if(pct >= 99.9){
+        let sorted = [...allFiles].sort((a,b)=> new Date(a.created_at||0) - new Date(b.created_at||0));
+        let delCount = Math.ceil(sorted.length * 0.1);
+        let delList = sorted.slice(0, delCount).map(i=>i.name);
+        await sb.storage.from("files").remove(delList);
+        await sb.from('file_notes').delete().in('file_name', delList);
     }
 }
 
-window.saveStorage=function(){
-    let v=parseFloat(document.getElementById('totalGB').value);
-    if(isNaN(v)||v<=0){alert("无效容量");return;}
-    totalStorageGB=v;localStorage.setItem('totalStorageGB',v);loadAllFiles();
+window.saveStorage = function(){
+    let v = parseFloat(document.getElementById('totalGB').value);
+    if(isNaN(v)||v<=0){ alert("请输入有效容量"); return; }
+    totalStorageGB = v;
+    localStorage.setItem('totalStorageGB', v);
+    loadAllFiles();
 }
 
 // 更新真实总空间显示
@@ -456,171 +525,292 @@ async function updateRealStorage(){
         `真实总占用：${(realBytes/1024**2).toFixed(2)} MB / 容量：${(maxBytes/1024**2).toFixed(2)} MB (${pct.toFixed(2)}%)`;
 }
 
-window.checkAll=()=>{startUserOperation();document.querySelectorAll('.file-chk').forEach(x=>x.checked=true);endUserOperation();}
-window.unCheckAll=()=>{startUserOperation();document.querySelectorAll('.file-chk').forEach(x=>x.checked=false);endUserOperation();}
-window.changeView=(t)=>{viewType=t;document.querySelectorAll('.view-mode button').forEach(x=>x.classList.remove('active'));document.getElementById(t==='list'?'listBtn':'gridBtn').classList.add('active');renderFiles();}
+window.checkAll = () => {
+    startUserOperation();
+    document.querySelectorAll(".file-chk").forEach(x => x.checked = true);
+    endUserOperation();
+};
+window.unCheckAll = () => {
+    startUserOperation();
+    document.querySelectorAll(".file-chk").forEach(x => x.checked = false);
+    endUserOperation();
+};
 
-function parseMultiKeywords(s){return s.trim().split(/[\s,，]+/).filter(k=>k);}
-window.doSearch=async()=>{startUserOperation();searchTxt=document.getElementById('search').value.toLowerCase();noteSearchTxt=document.getElementById('noteSearch').value.toLowerCase();currentPage=1;await loadAllFiles();endUserOperation();}
-window.triggerFileUpload=()=>{startUserOperation();document.getElementById('fileInput').click();}
+window.changeView = (t) => {
+    viewType = t;
+    document.querySelectorAll(".view-mode button").forEach(x=>x.classList.remove("active"));
+    document.getElementById(t === 'list' ? 'listBtn' : 'gridBtn').classList.add("active");
+    renderFiles();
+}
 
-window.loadAllFiles = async function(isSilent=false){
-    if(isUserOperating&&isSilent)return;
-    try{
-        let {data,error}=await sb.storage.from('files').list();
-        if(error)throw error;
-        allFiles=data||[];
-        allFiles.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+function parseMultiKeywords(str){
+    return str.trim().split(/[\s,，]+/).filter(k => k);
+}
+
+window.doSearch = async function(){
+    startUserOperation();
+    searchTxt = document.getElementById("search").value.trim().toLowerCase();
+    noteSearchTxt = document.getElementById("noteSearch").value.trim().toLowerCase();
+    currentPage = 1; await loadAllFiles();
+    endUserOperation();
+}
+
+window.triggerFileUpload = () => {
+    startUserOperation();
+    document.getElementById("fileInput").click();
+}
+
+window.loadAllFiles = async function(isSilent = false){
+    if (isUserOperating && isSilent) return;
+
+    try {
+        let { data, error } = await sb.storage.from("files").list();
+        if(error) {
+            alert("获取文件失败：" + error.message);
+            return;
+        }
+        allFiles = data || [];
         
-        await updateRealStorage(); // 实时更新真实总占用
+        allFiles.sort((a, b) => {
+            let ta = a.created_at || a.updated_at || '';
+            let tb = b.created_at || b.updated_at || '';
+            return new Date(tb) - new Date(ta);
+        });
+
+        // 更新真实存储占用
+        await updateRealStorage();
         await loadAllNotes();
+        
         renderFiles();
-    }catch(e){console.error(e);alert("加载失败");}
+    } catch(e) {
+        console.error("加载失败:", e);
+        alert("获取文件失败：" + e.message);
+    }
 }
 
 function renderFiles(){
-    let mode=document.getElementById('searchType').value;
-    let nk=parseMultiKeywords(searchTxt);
-    let nt=parseMultiKeywords(noteSearchTxt);
-    
-    filteredFiles=allFiles.filter(f=>{
-        let fn=f.name.toLowerCase();
-        let nn=(fileNotes[f.name]||"").toLowerCase();
-        let okName=true,okNote=true,okUser=true,okDate=true;
-        
-        if(nk.length)okName=mode==='fuzzy'?nk.some(k=>fn.includes(k)):nk.some(k=>fn===k);
-        if(nt.length)okNote=mode==='fuzzy'?nt.some(k=>nn.includes(k)):nt.some(k=>nn===k);
-        if(selectedUserFilters.length)okUser=selectedUserFilters.some(u=>nn.includes(u));
-        
-        let t=f.created_at||"";
-        if(dateStart&&t){let d=t.split('T')[0];if(dateStart&&d<dateStart)okDate=false;if(dateEnd&&d>dateEnd)okDate=false;}
-        return okName&&okNote&&okUser&&okDate;
+    let searchMode = document.getElementById("searchType").value;
+    let nameKeys = parseMultiKeywords(searchTxt);
+    let noteKeys = parseMultiKeywords(noteSearchTxt);
+
+    filteredFiles = allFiles.filter(f => {
+        let fileName = f.name.toLowerCase();
+        let noteText = (fileNotes[f.name] || "").toLowerCase();
+        let nameOk = true;
+        let noteOk = true;
+        let userOk = true;
+
+        if(nameKeys.length > 0){
+            nameOk = searchMode === 'fuzzy' ? nameKeys.some(k => fileName.includes(k)) : nameKeys.some(k => fileName === k);
+        }
+        if(noteKeys.length > 0){
+            noteOk = searchMode === 'fuzzy' ? noteKeys.some(k => noteText.includes(k)) : noteKeys.some(k => noteText === k);
+        }
+        if(selectedUserFilters.length > 0){
+            userOk = selectedUserFilters.some(user => noteText.includes(user));
+        }
+
+        let t = f.created_at || f.updated_at || '';
+        let dateOk = true;
+        if(dateStart && t){
+            let d = t.split('T')[0];
+            if(dateStart && d < dateStart) dateOk = false;
+            if(dateEnd && d > dateEnd) dateOk = false;
+        }
+        return nameOk && noteOk && userOk && dateOk;
     });
 
-    document.getElementById('totalCountText').innerText=`总文件数：${filteredFiles.length} 个`;
-    let box=document.getElementById('fileBox');
-    let total=filteredFiles.length;
-    let totalPage=Math.ceil(total/pageSize)||1;
-    if(currentPage>totalPage)currentPage=totalPage;
-    let pageFiles=filteredFiles.slice((currentPage-1)*pageSize,currentPage*pageSize);
+    document.getElementById('totalCountText').innerText = `总文件数：${filteredFiles.length} 个`;
+    let rangeFiles = allFiles.filter(f => {
+        let t = f.created_at || f.updated_at || '';
+        if(!dateStart && !dateEnd) return true;
+        if(!t) return false;
+        let d = t.split('T')[0];
+        if(dateStart && d < dateStart) return false;
+        if(dateEnd && d > dateEnd) return false;
+        return true;
+    });
+    if(dateStart || dateEnd){
+        document.getElementById('rangeCountText').innerText = `时间段内文件数（${dateStart||'不限'} ~ ${dateEnd||'不限'}）：${rangeFiles.length} 个`;
+    }else{
+        document.getElementById('rangeCountText').innerText = `时间段内文件数：未选择时间范围`;
+    }
 
-    if(pageFiles.length===0){box.innerHTML="无匹配文件";renderPagination();return;}
+    const totalPages = Math.ceil(filteredFiles.length / pageSize) || 1;
+    if(currentPage > totalPages) currentPage = totalPages;
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    const pageFiles = filteredFiles.slice(start, end);
 
-    if(viewType==='list'){
-        let h="";
-        pageFiles.forEach(f=>{
-            // 单文件大小 = 后台真实返回值
-            let realSize = f.metadata?.size || 0;
-            let url=sb.storage.from('files').getPublicUrl(f.name).data.publicUrl;
-            let size=formatSize(realSize);
-            let time=formatTime(f.created_at);
-            let note=fileNotes[f.name]||"";
-            h+=`
+    let box = document.getElementById("fileBox");
+    if(pageFiles.length === 0){ box.innerHTML = "无匹配文件"; renderPagination(); return; }
+
+    if(viewType === 'list'){
+        let h = "";
+        pageFiles.forEach(f => {
+            let url = sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
+            let size = formatSize(f.metadata?.size);
+            let time = formatTime(f.created_at || f.updated_at);
+            let nowNote = fileNotes[f.name] || "";
+            h += `
             <div class="file-item">
-                <input type="checkbox" class="file-chk" value="${f.name}">
+                <input type="checkbox" class="file-chk" value="${f.name}" onclick="startUserOperation(); endUserOperation();">
                 <div class="file-info">
-                    <div>${f.name} <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;background:#19b500;font-size:12px">复制</button></div>
+                    <div>${f.name} 
+                        <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-left:6px;">复制</button>
+                    </div>
                     <div class="file-size-text">真实大小：${size}</div>
                     <div class="file-time-text">上传时间：${time}</div>
-                    <div style="margin-top:4px;display:flex;gap:6px">
-                        <input class="note-input" value="${note}" onblur="saveFileNote('${f.name}',this)" onkeydown="event.key==='Enter'&&saveFileNote('${f.name}',this)">
-                        <button onclick="clearSingleNote('${f.name}')" style="padding:2px 6px;background:#f56c6c;font-size:12px">清空</button>
+                    <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
+                        <input class="note-input" placeholder="填写备注" value="${nowNote}" 
+                            onblur="saveFileNote('${f.name}',this)"
+                            onkeydown="if(event.key==='Enter'){ saveFileNote('${f.name}',this); this.blur(); }">
+                        <button onclick="clearSingleNote('${f.name}')" style="padding:2px 6px;font-size:12px;background:#f56c6c;">清空备注</button>
                     </div>
                 </div>
                 <div>
                     <a href="${url}" target="_blank" class="btn-sm" style="background:#909399">预览</a>
-                    <a href="${url}" download="${f.name}" class="btn-sm" style="background:#67c23a;margin:0 4px">下载</a>
-                    <button class="danger" onclick="delOne('${f.name}')" style="padding:4px 8px">删除</button>
+                    <a href="${url}" download="${f.name}" class="btn-sm" style="background:#67c23a;margin:0 4px;">下载</a>
+                    <button class="small danger" onclick="delOne('${f.name}')">删除</button>
                 </div>
             </div>`;
         });
-        box.innerHTML=h;
+        box.innerHTML = h;
     }else{
-        let h='<div class="file-grid">';
-        pageFiles.forEach(f=>{
-            let realSize = f.metadata?.size || 0;
-            let url=sb.storage.from('files').getPublicUrl(f.name).data.publicUrl;
-            let isImg=/\.(jpg|jpeg|png|gif|webp)$/i.test(f.name);
-            let size=formatSize(realSize);
-            let time=formatTime(f.created_at);
-            let note=fileNotes[f.name]||"";
-            h+=`
+        let h = '<div class="file-grid">';
+        pageFiles.forEach(f => {
+            let url = sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
+            let isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name);
+            let size = formatSize(f.metadata?.size);
+            let time = formatTime(f.created_at || f.updated_at);
+            let nowNote = fileNotes[f.name] || "";
+            h += `
             <div class="grid-item">
-                <input type="checkbox" class="file-chk" value="${f.name}">
-                ${isImg?`<img src="${url}">`:`<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
+                <input type="checkbox" class="file-chk" value="${f.name}" onclick="startUserOperation(); endUserOperation();">
+                ${isImg ? `<img src="${url}">` : `<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
                 <div class="name">${f.name}</div>
-                <div style="font-size:12px">真实大小：${size}</div>
+                <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-top:4px;">复制纯文件名</button>
+                <div style="font-size:12px;color:#666">真实大小：${size}</div>
                 <div style="font-size:11px;color:#999">${time}</div>
-                <div style="margin:4px 0;display:flex;gap:4px;justify-content:center">
-                    <input class="note-input" style="width:80px" value="${note}" onblur="saveFileNote('${f.name}',this)">
-                    <button onclick="clearSingleNote('${f.name}')" style="padding:2px 4px;background:#f56c6c;font-size:11px">清空</button>
+                <div style="margin:4px 0;display:flex;align-items:center;gap:4px;justify-content:center;">
+                    <input class="note-input" style="width:80px" placeholder="备注" value="${nowNote}" 
+                        onblur="saveFileNote('${f.name}',this)"
+                        onkeydown="if(event.key==='Enter'){ saveFileNote('${f.name}',this); this.blur(); }">
+                    <button onclick="clearSingleNote('${f.name}')" style="padding:2px 4px;font-size:11px;background:#f56c6c;">清空</button>
                 </div>
-                <div style="display:flex;gap:4px;justify-content:center;margin-top:6px">
+                <div style="margin-top:6px;display:flex;gap:4px;justify-content:center;">
                     <a href="${url}" target="_blank" class="btn-sm" style="font-size:11px;background:#909399">预览</a>
                     <a href="${url}" download="${f.name}" class="btn-sm" style="font-size:11px;background:#67c23a">下载</a>
-                    <button class="danger" style="font-size:11px" onclick="delOne('${f.name}')">删除</button>
+                    <button class="small danger" style="font-size:11px" onclick="delOne('${f.name}')">删除</button>
                 </div>
             </div>`;
         });
-        box.innerHTML=h+'</div>';
+        h += "</div>";
+        box.innerHTML = h;
     }
     renderPagination();
 }
 
 function renderPagination(){
-    let total=filteredFiles.length;
-    let totalPage=Math.ceil(total/pageSize)||1;
-    let p=document.getElementById('pageBtns');
-    let info=document.getElementById('pageInfo');
-    let html=`<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>上一页</button>`;
-    let s=Math.max(1,currentPage-5);
-    let e=Math.min(totalPage,currentPage+4);
-    for(let i=s;i<=e;i++)html+=`<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
-    html+=`<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage>=totalPage?'disabled':''}>下一页</button>`;
-    p.innerHTML=html;
-    info.innerText=`第 ${currentPage}/${totalPage} 页 共 ${total} 条`;
-}
-
-window.goPage=(p)=>{let t=Math.ceil(filteredFiles.length/pageSize)||1;if(p<1||p>t)return;currentPage=p;renderFiles();}
-
-document.getElementById('fileInput').onchange=async e=>{
-    for(let f of e.target.files){
-        let safe=f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g,'_');
-        await sb.storage.from('files').upload(safe,f);
-        await sb.from('file_notes').upsert([{file_name:safe,note:currentLoginUser}]);
+    const total = filteredFiles.length;
+    const totalPages = Math.ceil(total / pageSize) || 1;
+    const pager = document.getElementById('pageBtns');
+    const info = document.getElementById('pageInfo');
+    let html = '';
+    html += `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>上一页</button>`;
+    let startPage = Math.max(1, currentPage - 5);
+    let endPage = Math.min(totalPages, currentPage + 4);
+    for(let i=startPage; i<=endPage; i++){
+        html += `<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
     }
-    alert("上传成功");
-    e.target.value="";
+    html += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage>=totalPages?'disabled':''}>下一页</button>`;
+    pager.innerHTML = html;
+    info.innerText = `第 ${currentPage} / ${totalPages} 页，共 ${total} 条`;
+}
+
+window.goPage = function(page){
+    const totalPages = Math.ceil(filteredFiles.length / pageSize) || 1;
+    if(page < 1 || page > totalPages) return;
+    currentPage = page; renderFiles();
+}
+
+document.getElementById("fileInput").onchange = async e => {
+    let fs = e.target.files;
+    for(let f of fs){
+        let safeName = f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g, '_');
+        await sb.storage.from("files").upload(safeName, f);
+        await sb.from('file_notes').upsert([{file_name: safeName, note: currentLoginUser}]);
+    }
+    alert("上传成功，已自动填写上传人姓名备注");
+    e.target.value = "";
+    currentPage = 1;
     loadAllFiles();
 }
 
-window.delOne=async(n)=>{if(!confirm("确定删除？"))return;await sb.storage.from('files').remove([n]);await sb.from('file_notes').delete().eq('file_name',n);loadAllFiles();}
-document.getElementById('batchDelete').onclick=async()=>{
-    let arr=Array.from(document.querySelectorAll('.file-chk:checked')).map(x=>x.value);
-    if(arr.length===0){alert("请勾选");return;}
-    if(!confirm(`删除${arr.length}个？`))return;
-    await sb.storage.from('files').remove(arr);
-    await sb.from('file_notes').delete().in('file_name',arr);
+window.delOne = async name => {
+    if(!confirm("确定删除？")) return;
+    await sb.storage.from("files").remove([name]);
+    await sb.from('file_notes').delete().eq('file_name', name);
     loadAllFiles();
 }
 
-document.getElementById('batchDownload').onclick=async()=>{
-    let arr=Array.from(document.querySelectorAll('.file-chk:checked')).map(x=>x.value);
-    if(arr.length===0){alert("请勾选");return;}
-    if(typeof JSZip==='undefined')await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
-    let z=new JSZip();
-    await Promise.all(arr.map(n=>fetch(sb.storage.from('files').getPublicUrl(n).data.publicUrl).then(r=>r.blob()).then(b=>z.file(n,b))));
-    let blob=await z.generateAsync({type:'blob'});
-    let a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download=`批量下载_${new Date().toLocaleString().replace(/[/:, ]/g,'-')}.zip`;
-    a.click();
-    alert("下载完成");
+document.getElementById("batchDelete").onclick = async () => {
+    let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+    if(arr.length === 0){ alert("请先勾选文件"); return; }
+    if(!confirm(`确定删除 ${arr.length} 个文件？`)) return;
+    await sb.storage.from("files").remove(arr);
+    await sb.from('file_notes').delete().in('file_name', arr);
+    loadAllFiles();
 }
+
+document.getElementById("batchDownload").onclick = async () => {
+    let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+    if(arr.length === 0){ alert("请先勾选文件"); return; }
+
+    try {
+        if (typeof JSZip === 'undefined') {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        const zip = new JSZip();
+        const promises = [];
+
+        for (const name of arr) {
+            const url = sb.storage.from("files").getPublicUrl(name).data.publicUrl;
+            const encodedUrl = encodeURI(url);
+            const promise = fetch(encodedUrl)
+                .then(res => res.blob())
+                .then(blob => zip.file(name, blob));
+            promises.push(promise);
+        }
+
+        await Promise.all(promises);
+
+        const content = await zip.generateAsync({ type: 'blob' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(content);
+        const date = new Date().toLocaleString().replace(/[/:, ]/g, '-');
+        link.download = `文件批量下载_${date}.zip`;
+        link.click();
+        
+        alert(`批量下载完成！共 ${arr.length} 个文件`);
+    } catch (err) {
+        console.error('批量下载失败：', err);
+        alert('批量下载失败，请重试');
+    }
+};
 
 function startAutoRefresh(){
-    clearInterval(autoRefreshTimer);
-    autoRefreshTimer=setInterval(()=>currentLoginUser&&loadAllFiles(true),AUTO_REFRESH_INTERVAL);
+    if(autoRefreshTimer) clearInterval(autoRefreshTimer);
+    autoRefreshTimer = setInterval(() => { 
+        if(currentLoginUser) loadAllFiles(true); 
+    }, AUTO_REFRESH_INTERVAL);
 }
 </script>
 </body>
