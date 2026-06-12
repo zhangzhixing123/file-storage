@@ -258,6 +258,9 @@ let filteredFiles = [];
 let fileNotes = {};
 let selectedUserFilters = [];
 
+// 存储「安全文件名 → 原始文件名」映射
+let fileNameMap = {};
+
 function startUserOperation() {
     isUserOperating = true;
     if (idleTimer) clearTimeout(idleTimer);
@@ -292,9 +295,10 @@ function getPureFileName(name){
     return name.lastIndexOf('.') > 0 ? name.substring(0, name.lastIndexOf('.')) : name;
 }
 
-window.copySingleFileName = async function(filename){
+window.copySingleFileName = async function(safeFileName){
+    let originalName = fileNameMap[safeFileName] || safeFileName;
     try {
-        let pure = getPureFileName(filename);
+        let pure = getPureFileName(originalName);
         await navigator.clipboard.writeText(pure);
         alert("复制成功：" + pure);
     }catch(e){ alert("复制失败，请重试") }
@@ -303,7 +307,10 @@ window.copySingleFileName = async function(filename){
 window.copySelectedFileNames = async function(){
     let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(arr.length === 0){ alert("请先勾选文件"); return; }
-    let text = arr.map(getPureFileName).join(",");
+    let text = arr.map(safeName => {
+        let originalName = fileNameMap[safeName] || safeName;
+        return getPureFileName(originalName);
+    }).join(",");
     try {
         await navigator.clipboard.writeText(text);
         alert("批量复制成功！\n" + text);
@@ -443,7 +450,15 @@ window.batchClearNote = async function(){
 async function loadAllNotes() {
     const { data } = await sb.from('file_notes').select('*');
     fileNotes = {};
-    if(data) data.forEach(item => { fileNotes[item.file_name] = item.note; });
+    fileNameMap = {};
+    if(data) data.forEach(item => { 
+        fileNotes[item.file_name] = item.note; 
+        // 解析备注里的原文件名
+        if(item.note && item.note.includes("|原文件：")){
+            let originalName = item.note.split("|原文件：")[1];
+            fileNameMap[item.file_name] = originalName;
+        }
+    });
 }
 
 function formatSize(b) {
@@ -582,7 +597,8 @@ function renderFiles(){
     let noteKeys = parseMultiKeywords(noteSearchTxt);
 
     filteredFiles = allFiles.filter(f => {
-        let fileName = f.name.toLowerCase();
+        let originalName = fileNameMap[f.name] || f.name;
+        let fileName = originalName.toLowerCase();
         let noteText = (fileNotes[f.name] || "").toLowerCase();
         let nameOk = true;
         let noteOk = true;
@@ -640,11 +656,7 @@ function renderFiles(){
             let size = formatSize(f.metadata?.size);
             let time = formatTime(f.created_at || f.updated_at);
             let nowNote = fileNotes[f.name] || "";
-            // 解析备注里的原始文件名，优先展示原名
-            let showName = f.name;
-            if(nowNote && nowNote.includes("原文件：")){
-                showName = nowNote.split("原文件：")[1] || f.name;
-            }
+            let showName = fileNameMap[f.name] || f.name;
             h += `
             <div class="file-item">
                 <input type="checkbox" class="file-chk" value="${f.name}" onclick="startUserOperation(); endUserOperation();">
@@ -677,11 +689,7 @@ function renderFiles(){
             let size = formatSize(f.metadata?.size);
             let time = formatTime(f.created_at || f.updated_at);
             let nowNote = fileNotes[f.name] || "";
-            // 解析备注里的原始文件名，优先展示原名
-            let showName = f.name;
-            if(nowNote && nowNote.includes("原文件：")){
-                showName = nowNote.split("原文件：")[1] || f.name;
-            }
+            let showName = fileNameMap[f.name] || f.name;
             h += `
             <div class="grid-item">
                 <input type="checkbox" class="file-chk" value="${f.name}" onclick="startUserOperation(); endUserOperation();">
@@ -732,7 +740,7 @@ window.goPage = function(page){
     currentPage = page; renderFiles();
 }
 
-// ========== 【优化后上传核心代码】 解决文件名上传失败 ==========
+// ========== 【优化后上传核心代码】 ==========
 document.getElementById("fileInput").onchange = async e => {
     const files = e.target.files;
     let successCount = 0;
@@ -741,7 +749,7 @@ document.getElementById("fileInput").onchange = async e => {
     for (const f of files) {
         // 1. 提取文件后缀
         const ext = f.name.includes('.') ? f.name.slice(f.name.lastIndexOf('.')) : '';
-        // 2. 生成绝对安全文件名：时间戳+随机串，彻底规避云存储风控
+        // 2. 生成安全文件名
         const safeFileName = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}${ext}`;
 
         try {
@@ -753,11 +761,13 @@ document.getElementById("fileInput").onchange = async e => {
                 failCount++;
                 continue;
             }
-            // 4. 备注保存：上传人 + 原始文件名
+            // 4. 备注只保留上传人（不自动写原文件名）
             await sb.from('file_notes').upsert([{
                 file_name: safeFileName,
-                note: `${currentLoginUser} | 原文件：${f.name}`
+                note: `${currentLoginUser}`
             }]);
+            // 同时记录映射关系，方便前台显示/搜索/复制
+            fileNameMap[safeFileName] = f.name;
             successCount++;
         } catch (err) {
             console.error("上传异常：", f.name, err);
@@ -812,12 +822,7 @@ document.getElementById("batchDownload").onclick = async () => {
             const promise = fetch(encodedUrl)
                 .then(res => res.blob())
                 .then(blob => {
-                    // 下载包内还原原始文件名
-                    let realName = name;
-                    const note = fileNotes[name] || "";
-                    if(note && note.includes("原文件：")){
-                        realName = note.split("原文件：")[1] || name;
-                    }
+                    let realName = fileNameMap[name] || name;
                     zip.file(realName, blob);
                 });
             promises.push(promise);
