@@ -233,9 +233,9 @@
 
 <script>
 const FIX_PWD = "123456";
-// ========== 全局配置项（按需修改这里即可） ==========
-const AUTO_REFRESH_INTERVAL = 10000;  // 自动刷新间隔：10秒(单位ms)
-const IDLE_RESTORE_TIME = 30000;      // 闲置恢复自动刷新：30秒(单位ms)
+// ========== 全局配置项 ==========
+const AUTO_REFRESH_INTERVAL = 10000;  // 自动刷新间隔：10秒
+const IDLE_RESTORE_TIME = 30000;      // 闲置恢复自动刷新：30秒
 // =================================================
 
 let autoRefreshTimer;
@@ -640,11 +640,16 @@ function renderFiles(){
             let size = formatSize(f.metadata?.size);
             let time = formatTime(f.created_at || f.updated_at);
             let nowNote = fileNotes[f.name] || "";
+            // 解析备注里的原始文件名，优先展示原名
+            let showName = f.name;
+            if(nowNote && nowNote.includes("原文件：")){
+                showName = nowNote.split("原文件：")[1] || f.name;
+            }
             h += `
             <div class="file-item">
                 <input type="checkbox" class="file-chk" value="${f.name}" onclick="startUserOperation(); endUserOperation();">
                 <div class="file-info">
-                    <div>${f.name} 
+                    <div>${showName} 
                         <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-left:6px;">复制</button>
                     </div>
                     <div class="file-size-text">大小：${size}</div>
@@ -658,7 +663,7 @@ function renderFiles(){
                 </div>
                 <div>
                     <a href="${url}" target="_blank" class="btn-sm" style="background:#909399">预览</a>
-                    <a href="${url}" download="${f.name}" class="btn-sm" style="background:#67c23a;margin:0 4px;">下载</a>
+                    <a href="${url}" download="${showName}" class="btn-sm" style="background:#67c23a;margin:0 4px;">下载</a>
                     <button class="small danger" onclick="delOne('${f.name}')">删除</button>
                 </div>
             </div>`;
@@ -672,11 +677,16 @@ function renderFiles(){
             let size = formatSize(f.metadata?.size);
             let time = formatTime(f.created_at || f.updated_at);
             let nowNote = fileNotes[f.name] || "";
+            // 解析备注里的原始文件名，优先展示原名
+            let showName = f.name;
+            if(nowNote && nowNote.includes("原文件：")){
+                showName = nowNote.split("原文件：")[1] || f.name;
+            }
             h += `
             <div class="grid-item">
                 <input type="checkbox" class="file-chk" value="${f.name}" onclick="startUserOperation(); endUserOperation();">
                 ${isImg ? `<img src="${url}">` : `<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
-                <div class="name">${f.name}</div>
+                <div class="name">${showName}</div>
                 <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-top:4px;">复制纯文件名</button>
                 <div style="font-size:12px;color:#666">${size}</div>
                 <div style="font-size:11px;color:#999">${time}</div>
@@ -688,7 +698,7 @@ function renderFiles(){
                 </div>
                 <div style="margin-top:6px;display:flex;gap:4px;justify-content:center;">
                     <a href="${url}" target="_blank" class="btn-sm" style="font-size:11px;background:#909399">预览</a>
-                    <a href="${url}" download="${f.name}" class="btn-sm" style="font-size:11px;background:#67c23a">下载</a>
+                    <a href="${url}" download="${showName}" class="btn-sm" style="font-size:11px;background:#67c23a">下载</a>
                     <button class="small danger" style="font-size:11px" onclick="delOne('${f.name}')">删除</button>
                 </div>
             </div>`;
@@ -722,18 +732,45 @@ window.goPage = function(page){
     currentPage = page; renderFiles();
 }
 
+// ========== 【优化后上传核心代码】 解决文件名上传失败 ==========
 document.getElementById("fileInput").onchange = async e => {
-    let fs = e.target.files;
-    for(let f of fs){
-        let safeName = f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g, '_');
-        await sb.storage.from("files").upload(safeName, f);
-        await sb.from('file_notes').upsert([{file_name: safeName, note: currentLoginUser}]);
+    const files = e.target.files;
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const f of files) {
+        // 1. 提取文件后缀
+        const ext = f.name.includes('.') ? f.name.slice(f.name.lastIndexOf('.')) : '';
+        // 2. 生成绝对安全文件名：时间戳+随机串，彻底规避云存储风控
+        const safeFileName = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}${ext}`;
+
+        try {
+            // 3. 执行上传
+            const { data, error } = await sb.storage.from("files").upload(safeFileName, f);
+            if (error) {
+                console.error("上传失败：", f.name, error);
+                alert(`文件【${f.name}】上传失败：${error.message}`);
+                failCount++;
+                continue;
+            }
+            // 4. 备注保存：上传人 + 原始文件名
+            await sb.from('file_notes').upsert([{
+                file_name: safeFileName,
+                note: `${currentLoginUser} | 原文件：${f.name}`
+            }]);
+            successCount++;
+        } catch (err) {
+            console.error("上传异常：", f.name, err);
+            alert(`文件【${f.name}】上传出现异常`);
+            failCount++;
+        }
     }
-    alert("上传成功，已自动填写上传人姓名备注");
+
+    alert(`上传完成：成功 ${successCount} 个，失败 ${failCount} 个`);
     e.target.value = "";
     currentPage = 1;
     loadAllFiles();
-}
+};
 
 window.delOne = async name => {
     if(!confirm("确定删除？")) return;
@@ -774,7 +811,15 @@ document.getElementById("batchDownload").onclick = async () => {
             const encodedUrl = encodeURI(url);
             const promise = fetch(encodedUrl)
                 .then(res => res.blob())
-                .then(blob => zip.file(name, blob));
+                .then(blob => {
+                    // 下载包内还原原始文件名
+                    let realName = name;
+                    const note = fileNotes[name] || "";
+                    if(note && note.includes("原文件：")){
+                        realName = note.split("原文件：")[1] || name;
+                    }
+                    zip.file(realName, blob);
+                });
             promises.push(promise);
         }
 
