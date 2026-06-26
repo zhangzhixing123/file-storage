@@ -658,7 +658,7 @@ function renderFiles(){
                 </div>
                 <div>
                     <a href="${url}" target="_blank" class="btn-sm" style="background:#909399">预览</a>
-                    <a href="${url}" download="${f.name}" class="btn-sm" style="background:#67c23a;margin:0 4px;">下载</a>
+                    <a href="${url}" download="${encodeURIComponent(f.name)}" class="btn-sm" style="background:#67c23a;margin:0 4px;">下载</a>
                     <button class="small danger" onclick="delOne('${f.name}')">删除</button>
                 </div>
             </div>`;
@@ -688,7 +688,7 @@ function renderFiles(){
                 </div>
                 <div style="margin-top:6px;display:flex;gap:4px;justify-content:center;">
                     <a href="${url}" target="_blank" class="btn-sm" style="font-size:11px;background:#909399">预览</a>
-                    <a href="${url}" download="${f.name}" class="btn-sm" style="font-size:11px;background:#67c23a">下载</a>
+                    <a href="${url}" download="${encodeURIComponent(f.name)}" class="btn-sm" style="font-size:11px;background:#67c23a">下载</a>
                     <button class="small danger" style="font-size:11px" onclick="delOne('${f.name}')">删除</button>
                 </div>
             </div>`;
@@ -722,18 +722,47 @@ window.goPage = function(page){
     currentPage = page; renderFiles();
 }
 
+// ============ 优化后的上传逻辑：保留绝大多数符号，仅删除非法字符 + 重名自动加后缀 ============
 document.getElementById("fileInput").onchange = async e => {
-    let fs = e.target.files;
-    for(let f of fs){
-        let safeName = f.name.replace(/[^\w\u4e00-\u9fa5.\-]/g, '_');
-        await sb.storage.from("files").upload(safeName, f);
-        await sb.from('file_notes').upsert([{file_name: safeName, note: currentLoginUser}]);
+    const fs = e.target.files;
+    // 仅剔除存储系统禁止的字符：\ / : * ? " < > | 制表、换行、控制字符
+    const illegalChars = /[\\\/:*?"<>|\t\n\r\0-\x1F\x7F]/g;
+    // 获取现有全部文件名用于查重，避免覆盖
+    const existNames = allFiles.map(item => item.name);
+
+    for (const f of fs) {
+        // 第一步：清理非法字符
+        let safeName = f.name.replace(illegalChars, '');
+        // 兜底防止空文件名
+        if (!safeName) safeName = `未命名_${Date.now()}`;
+
+        // 第二步：重名自动加数字后缀
+        let finalName = safeName;
+        let repeatNum = 1;
+        while (existNames.includes(finalName)) {
+            const dotIndex = finalName.lastIndexOf('.');
+            if (dotIndex > 0) {
+                const namePart = finalName.slice(0, dotIndex);
+                const extPart = finalName.slice(dotIndex);
+                finalName = `${namePart}_${repeatNum}${extPart}`;
+            } else {
+                finalName = `${finalName}_${repeatNum}`;
+            }
+            repeatNum++;
+        }
+        existNames.push(finalName);
+
+        // 上传文件
+        await sb.storage.from("files").upload(finalName, f);
+        // 备注写入上传人
+        await sb.from('file_notes').upsert([{ file_name: finalName, note: currentLoginUser }]);
     }
+
     alert("上传成功，已自动填写上传人姓名备注");
     e.target.value = "";
     currentPage = 1;
     loadAllFiles();
-}
+};
 
 window.delOne = async name => {
     if(!confirm("确定删除？")) return;
@@ -774,7 +803,10 @@ document.getElementById("batchDownload").onclick = async () => {
             const encodedUrl = encodeURI(url);
             const promise = fetch(encodedUrl)
                 .then(res => res.blob())
-                .then(blob => zip.file(name, blob));
+                .then(blob => {
+                    // binary:true 解决压缩包内中文/特殊文件名乱码
+                    zip.file(name, blob, { binary: true });
+                });
             promises.push(promise);
         }
 
