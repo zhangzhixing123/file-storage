@@ -253,7 +253,7 @@ let autoDelDay = parseInt(localStorage.getItem('autoDelDay')) || 0;
 let pageSize = parseInt(localStorage.getItem('pageSize')) || 20;
 let currentPage = 1;
 let filteredFiles = [];
-// 重构元数据：key=存储文件名，value={uploader:"上传人", note:"自定义备注", origin_name:"原始文件名"}
+// 文件元数据：{uploader:"上传人", note:"自定义备注", origin_name:"原始文件名"}
 let fileMeta = {};
 let selectedUserFilters = [];
 
@@ -291,7 +291,7 @@ function getPureFileName(name){
     return name.lastIndexOf('.') > 0 ? name.substring(0, name.lastIndexOf('.')) : name;
 }
 
-// 获取文件完整元数据
+// 获取文件元数据
 function getFileMeta(storeName){
     return fileMeta[storeName] || { uploader:"", note:"", origin_name:storeName };
 }
@@ -407,7 +407,7 @@ window.setQuickDate = function(type){
     renderFiles();
 }
 
-// 保存单条自定义备注，仅修改note字段
+// 保存单条自定义备注
 window.saveFileNote = async function(storeName,el){
     let noteInputVal = el.value.trim();
     const meta = getFileMeta(storeName);
@@ -423,7 +423,7 @@ window.saveFileNote = async function(storeName,el){
     } catch (e) {}
 }
 
-// 清空单条备注，上传人、原始文件名不变
+// 清空单条备注
 window.clearSingleNote = async function(storeName){
     if(!confirm("确定清空该文件的备注吗？")) return;
     const meta = getFileMeta(storeName);
@@ -484,7 +484,7 @@ window.batchClearNote = async function(){
     renderFiles();
 }
 
-// 加载所有文件元数据（上传人/备注/原始文件名）
+// 加载所有文件元数据
 async function loadAllNotes() {
     const { data } = await sb.from('file_notes').select('*');
     fileMeta = {};
@@ -627,7 +627,7 @@ window.loadAllFiles = async function(isSilent = false){
     }
 }
 
-// 上传核心逻辑：独立存储上传人、原始文件名，备注默认空白
+// 上传逻辑：独立上传人、原始文件名，备注默认空白
 document.getElementById("fileInput").onchange = async e => {
     const fs = e.target.files;
     const illegalChars = /[\\\/:*?"<>|\t\n\r\0-\x1F\x7F]/g;
@@ -641,11 +641,9 @@ document.getElementById("fileInput").onchange = async e => {
         let safeName = originFileName.replace(illegalChars, '');
         if (!safeName) safeName = `未命名_${Date.now()}`;
 
-        // 增加时间戳前缀规避supabase拦截纯字母数字短文件名
         const randomPrefix = Date.now() + "_";
         let storageFileName = randomPrefix + safeName;
 
-        // 重名后缀处理
         let repeatNum = 1;
         while (existNames.includes(storageFileName)) {
             const dotIndex = storageFileName.lastIndexOf('.');
@@ -663,7 +661,6 @@ document.getElementById("fileInput").onchange = async e => {
         try {
             const { error } = await sb.storage.from("files").upload(storageFileName, f);
             if (error) throw error;
-            // 拆分独立字段：上传人、原始文件名，备注默认空
             await sb.from('file_notes').upsert([{
                 file_name: storageFileName,
                 uploader: currentLoginUser,
@@ -777,13 +774,14 @@ window.goPage = function(page){
     currentPage = page; renderFiles();
 }
 
-// 重写渲染函数：上传人、备注完全分离
+// 修复：统一筛选口径，解决上传人+时间筛选数量对不上问题
 function renderFiles(){
     let searchMode = document.getElementById("searchType").value;
     let nameKeys = parseMultiKeywords(searchTxt);
     let noteKeys = parseMultiKeywords(noteSearchTxt);
 
-    filteredFiles = allFiles.filter(f => {
+    // 统一全量筛选判断函数（文件名/备注/上传人/时间共用）
+    function matchAllFilter(f){
         const storeName = f.name;
         const meta = getFileMeta(storeName);
         const realFileName = getDisplayFileName(storeName);
@@ -794,6 +792,7 @@ function renderFiles(){
         let nameOk = true;
         let noteOk = true;
         let userOk = true;
+        let dateOk = true;
 
         // 文件名搜索
         if(nameKeys.length > 0){
@@ -803,7 +802,7 @@ function renderFiles(){
                 nameOk = nameKeys.some(k => displayLower === k);
             }
         }
-        // 备注搜索（仅匹配自定义note，不匹配上传人）
+        // 备注搜索（仅匹配自定义note）
         if(noteKeys.length > 0){
             if(searchMode === 'fuzzy'){
                 noteOk = noteKeys.some(k => pureNoteText.includes(k));
@@ -811,13 +810,12 @@ function renderFiles(){
                 noteOk = noteKeys.some(k => pureNoteText === k);
             }
         }
-        // 上传人筛选：读取独立uploader字段
+        // 上传人筛选
         if(selectedUserFilters.length > 0){
             userOk = selectedUserFilters.includes(uploader);
         }
         // 时间筛选
         let fileTime = f.created_at || f.updated_at || '';
-        let dateOk = true;
         if(dateStart && fileTime){
             const dayStr = fileTime.split('T')[0];
             if(dayStr < dateStart) dateOk = false;
@@ -827,18 +825,22 @@ function renderFiles(){
             if(dayStr > dateEnd) dateOk = false;
         }
         return nameOk && noteOk && userOk && dateOk;
+    }
+
+    // 所有符合全部筛选条件的数据
+    filteredFiles = allFiles.filter(f => matchAllFilter(f));
+    // 时间段统计：基于已过滤上传人/关键词的结果再筛选时间，口径完全统一
+    const rangeFiles = filteredFiles.filter(f => {
+        let fileTime = f.created_at || f.updated_at || '';
+        if(!dateStart && !dateEnd) return true;
+        if(!fileTime) return false;
+        const dayStr = fileTime.split('T')[0];
+        if(dateStart && dayStr < dateStart) return false;
+        if(dateEnd && dayStr > dateEnd) return false;
+        return true;
     });
 
     document.getElementById('totalCountText').innerText = `总文件数：${filteredFiles.length} 个`;
-    let rangeFiles = allFiles.filter(f => {
-        let t = f.created_at || f.updated_at || '';
-        if(!dateStart && !dateEnd) return true;
-        if(!t) return false;
-        let d = t.split('T')[0];
-        if(dateStart && d < dateStart) return false;
-        if(dateEnd && d > dateEnd) return false;
-        return true;
-    });
     if(dateStart || dateEnd){
         document.getElementById('rangeCountText').innerText = `时间段内文件数（${dateStart||'不限'} ~ ${dateEnd||'不限'}）：${rangeFiles.length} 个`;
     }else{
