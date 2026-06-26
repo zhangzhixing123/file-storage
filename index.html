@@ -253,7 +253,8 @@ let autoDelDay = parseInt(localStorage.getItem('autoDelDay')) || 0;
 let pageSize = parseInt(localStorage.getItem('pageSize')) || 20;
 let currentPage = 1;
 let filteredFiles = [];
-let fileNotes = {};
+// 重构元数据：key=存储文件名，value={uploader:"上传人", note:"自定义备注", origin_name:"原始文件名"}
+let fileMeta = {};
 let selectedUserFilters = [];
 
 function startUserOperation() {
@@ -290,10 +291,20 @@ function getPureFileName(name){
     return name.lastIndexOf('.') > 0 ? name.substring(0, name.lastIndexOf('.')) : name;
 }
 
+// 获取文件完整元数据
+function getFileMeta(storeName){
+    return fileMeta[storeName] || { uploader:"", note:"", origin_name:storeName };
+}
+
+// 获取前端展示原始文件名
+function getDisplayFileName(storeName) {
+    const meta = getFileMeta(storeName);
+    return meta.origin_name || storeName;
+}
+
 window.copySingleFileName = async function(storeName){
     try {
-        const note = fileNotes[storeName] || "";
-        const realName = getDisplayFileName(storeName, note);
+        const realName = getDisplayFileName(storeName);
         let pure = getPureFileName(realName);
         await navigator.clipboard.writeText(pure);
         alert("复制成功：" + pure);
@@ -304,8 +315,8 @@ window.copySelectedFileNames = async function(){
     let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(arr.length === 0){ alert("请先勾选文件"); return; }
     let text = arr.map(storeName=>{
-        const note = fileNotes[storeName]||"";
-        return getPureFileName(getDisplayFileName(storeName,note));
+        const realName = getDisplayFileName(storeName);
+        return getPureFileName(realName);
     }).join(",");
     try {
         await navigator.clipboard.writeText(text);
@@ -396,27 +407,38 @@ window.setQuickDate = function(type){
     renderFiles();
 }
 
+// 保存单条自定义备注，仅修改note字段
 window.saveFileNote = async function(storeName,el){
     let noteInputVal = el.value.trim();
-    const oldFullNote = fileNotes[storeName] || "";
-    const originName = oldFullNote.split("|||")[1] || "";
-    const newFullNote = `${noteInputVal}|||${originName}`;
-    fileNotes[storeName] = newFullNote;
+    const meta = getFileMeta(storeName);
+    meta.note = noteInputVal;
+    fileMeta[storeName] = meta;
     try {
-        await sb.from('file_notes').upsert([{ file_name: storeName, note: newFullNote }]);
+        await sb.from('file_notes').upsert([{ 
+            file_name: storeName, 
+            uploader: meta.uploader,
+            note: meta.note,
+            origin_name: meta.origin_name
+        }]);
     } catch (e) {}
 }
 
+// 清空单条备注，上传人、原始文件名不变
 window.clearSingleNote = async function(storeName){
     if(!confirm("确定清空该文件的备注吗？")) return;
-    const oldFullNote = fileNotes[storeName] || "";
-    const originName = oldFullNote.split("|||")[1] || "";
-    const newFullNote = `|||${originName}`;
-    fileNotes[storeName] = newFullNote;
-    await sb.from('file_notes').upsert([{ file_name: storeName, note: newFullNote }]);
+    const meta = getFileMeta(storeName);
+    meta.note = "";
+    fileMeta[storeName] = meta;
+    await sb.from('file_notes').upsert([{ 
+        file_name: storeName, 
+        uploader: meta.uploader,
+        note: "",
+        origin_name: meta.origin_name
+    }]);
     renderFiles();
 }
 
+// 批量新增备注
 window.batchAddNote = async function(){
     let noteText = document.getElementById('batchNoteInput').value.trim();
     if(!noteText){ alert("请输入要添加的备注内容"); return; }
@@ -426,39 +448,53 @@ window.batchAddNote = async function(){
     if(!confirm(`确定为选中的 ${selectedStores.length} 个文件添加备注内容："${noteText}"？`)) return;
 
     for(let store of selectedStores){
-        let fullNote = fileNotes[store] || "";
-        const uploader = fullNote.split("|||")[0] || "";
-        const origin = fullNote.split("|||")[1] || "";
-        let newUploader = uploader ? `${uploader} ${noteText}` : noteText;
-        const newFull = `${newUploader}|||${origin}`;
-        fileNotes[store] = newFull;
-        await sb.from('file_notes').upsert([{ file_name: store, note: newFull }]);
+        let meta = getFileMeta(store);
+        meta.note = noteText;
+        fileMeta[store] = meta;
+        await sb.from('file_notes').upsert([{ 
+            file_name: store, 
+            uploader: meta.uploader,
+            note: meta.note,
+            origin_name: meta.origin_name
+        }]);
     }
     alert("批量添加备注完成！");
     document.getElementById('batchNoteInput').value = "";
     renderFiles();
 }
 
+// 批量清空备注
 window.batchClearNote = async function(){
     let selectedStores = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(selectedStores.length === 0){ alert("请先勾选文件"); return; }
     if(!confirm(`确定清空选中的 ${selectedStores.length} 个文件的备注吗？`)) return;
 
     for(let store of selectedStores){
-        let fullNote = fileNotes[store] || "";
-        const origin = fullNote.split("|||")[1] || "";
-        const newFull = `|||${origin}`;
-        fileNotes[store] = newFull;
-        await sb.from('file_notes').upsert([{ file_name: store, note: newFull }]);
+        let meta = getFileMeta(store);
+        meta.note = "";
+        fileMeta[store] = meta;
+        await sb.from('file_notes').upsert([{ 
+            file_name: store, 
+            uploader: meta.uploader,
+            note: "",
+            origin_name: meta.origin_name
+        }]);
     }
     alert("批量清空备注完成！");
     renderFiles();
 }
 
+// 加载所有文件元数据（上传人/备注/原始文件名）
 async function loadAllNotes() {
     const { data } = await sb.from('file_notes').select('*');
-    fileNotes = {};
-    if(data) data.forEach(item => { fileNotes[item.file_name] = item.note; });
+    fileMeta = {};
+    if(data) data.forEach(item => {
+        fileMeta[item.file_name] = {
+            uploader: item.uploader || "",
+            note: item.note || "",
+            origin_name: item.origin_name || item.file_name
+        };
+    });
 }
 
 function formatSize(b) {
@@ -591,14 +627,7 @@ window.loadAllFiles = async function(isSilent = false){
     }
 }
 
-// 拆分备注获取前端展示原始文件名
-function getDisplayFileName(storeName, noteStr) {
-    if (!noteStr || !noteStr.includes("|||")) return storeName;
-    const splitArr = noteStr.split("|||");
-    return splitArr[1] || storeName;
-}
-
-// 上传核心逻辑：存储文件名加时间戳前缀，解决WJZJ2M42这类短大写串拦截
+// 上传核心逻辑：独立存储上传人、原始文件名，备注默认空白
 document.getElementById("fileInput").onchange = async e => {
     const fs = e.target.files;
     const illegalChars = /[\\\/:*?"<>|\t\n\r\0-\x1F\x7F]/g;
@@ -634,10 +663,12 @@ document.getElementById("fileInput").onchange = async e => {
         try {
             const { error } = await sb.storage.from("files").upload(storageFileName, f);
             if (error) throw error;
-            // 备注格式：上传人|||原始文件名
+            // 拆分独立字段：上传人、原始文件名，备注默认空
             await sb.from('file_notes').upsert([{
                 file_name: storageFileName,
-                note: `${currentLoginUser}|||${originFileName}`
+                uploader: currentLoginUser,
+                note: "",
+                origin_name: originFileName
             }]);
             successCount++;
         } catch (err) {
@@ -702,8 +733,7 @@ document.getElementById("batchDownload").onclick = async () => {
         for (const storeName of arr) {
             const url = sb.storage.from("files").getPublicUrl(storeName).data.publicUrl;
             const encodedUrl = encodeURI(url);
-            const note = fileNotes[storeName] || "";
-            const showName = getDisplayFileName(storeName, note);
+            const showName = getDisplayFileName(storeName);
             const promise = fetch(encodedUrl)
                 .then(res => res.blob())
                 .then(blob => zip.file(showName, blob, { binary: true }));
@@ -747,7 +777,7 @@ window.goPage = function(page){
     currentPage = page; renderFiles();
 }
 
-// 重写渲染函数，展示原始文件名、搜索匹配原名、筛选上传人
+// 重写渲染函数：上传人、备注完全分离
 function renderFiles(){
     let searchMode = document.getElementById("searchType").value;
     let nameKeys = parseMultiKeywords(searchTxt);
@@ -755,11 +785,11 @@ function renderFiles(){
 
     filteredFiles = allFiles.filter(f => {
         const storeName = f.name;
-        const fullNote = fileNotes[storeName] || "";
-        const realFileName = getDisplayFileName(storeName, fullNote);
+        const meta = getFileMeta(storeName);
+        const realFileName = getDisplayFileName(storeName);
         const displayLower = realFileName.toLowerCase();
-        const uploader = fullNote.split("|||")[0] || "";
-        const pureNoteText = uploader.toLowerCase();
+        const uploader = meta.uploader || "";
+        const pureNoteText = meta.note.toLowerCase();
 
         let nameOk = true;
         let noteOk = true;
@@ -773,7 +803,7 @@ function renderFiles(){
                 nameOk = nameKeys.some(k => displayLower === k);
             }
         }
-        // 备注搜索
+        // 备注搜索（仅匹配自定义note，不匹配上传人）
         if(noteKeys.length > 0){
             if(searchMode === 'fuzzy'){
                 noteOk = noteKeys.some(k => pureNoteText.includes(k));
@@ -781,7 +811,7 @@ function renderFiles(){
                 noteOk = noteKeys.some(k => pureNoteText === k);
             }
         }
-        // 上传人筛选
+        // 上传人筛选：读取独立uploader字段
         if(selectedUserFilters.length > 0){
             userOk = selectedUserFilters.includes(uploader);
         }
@@ -832,9 +862,10 @@ function renderFiles(){
         let h = "";
         pageFiles.forEach(f => {
             const storeFileName = f.name;
-            const fullNote = fileNotes[storeFileName] || "";
-            const showName = getDisplayFileName(storeFileName, fullNote);
-            const uploadUser = fullNote.split("|||")[0] || "";
+            const meta = getFileMeta(storeFileName);
+            const showName = getDisplayFileName(storeFileName);
+            const uploadUser = meta.uploader || "";
+            const fileNote = meta.note || "";
             const url = sb.storage.from("files").getPublicUrl(storeFileName).data.publicUrl;
             const size = formatSize(f.metadata?.size);
             const time = formatTime(f.created_at || f.updated_at);
@@ -850,7 +881,7 @@ function renderFiles(){
                     <div class="file-size-text">大小：${size}</div>
                     <div class="file-time-text">上传时间：${time}</div>
                     <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
-                        <input class="note-input" placeholder="填写备注" value="${uploadUser}"
+                        <input class="note-input" placeholder="填写自定义备注" value="${fileNote}"
                             onblur="saveFileNote('${storeFileName}',this)"
                             onkeydown="if(event.key==='Enter'){ saveFileNote('${storeFileName}',this); this.blur(); }">
                         <button onclick="clearSingleNote('${storeFileName}')" style="padding:2px 6px;font-size:12px;background:#f56c6c;">清空备注</button>
@@ -868,9 +899,10 @@ function renderFiles(){
         let h = '<div class="file-grid">';
         pageFiles.forEach(f => {
             const storeFileName = f.name;
-            const fullNote = fileNotes[storeFileName] || "";
-            const showName = getDisplayFileName(storeFileName, fullNote);
-            const uploadUser = fullNote.split("|||")[0] || "";
+            const meta = getFileMeta(storeFileName);
+            const showName = getDisplayFileName(storeFileName);
+            const uploadUser = meta.uploader || "";
+            const fileNote = meta.note || "";
             const url = sb.storage.from("files").getPublicUrl(storeFileName).data.publicUrl;
             const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(storeFileName);
             const size = formatSize(f.metadata?.size);
@@ -881,11 +913,12 @@ function renderFiles(){
                 <input type="checkbox" class="file-chk" value="${storeFileName}" onclick="startUserOperation(); endUserOperation();">
                 ${isImg ? `<img src="${url}">` : `<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
                 <div class="name">${showName}</div>
+                <div style="font-size:12px;color:#409eff">上传人：${uploadUser}</div>
                 <button onclick="copySingleFileName('${storeFileName}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-top:4px;">复制纯文件名</button>
                 <div style="font-size:12px;color:#666">${size}</div>
                 <div style="font-size:11px;color:#999">${time}</div>
                 <div style="margin:4px 0;display:flex;align-items:center;gap:4px;justify-content:center;">
-                    <input class="note-input" style="width:80px" placeholder="备注" value="${uploadUser}"
+                    <input class="note-input" style="width:80px" placeholder="自定义备注" value="${fileNote}"
                         onblur="saveFileNote('${storeFileName}',this)"
                         onkeydown="if(event.key==='Enter'){ saveFileNote('${storeFileName}',this); this.blur(); }">
                     <button onclick="clearSingleNote('${storeFileName}')" style="padding:2px 4px;font-size:11px;background:#f56c6c;">清空</button>
