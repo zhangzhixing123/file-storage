@@ -161,6 +161,8 @@
             <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
             <button id="batchDownload">📥 批量下载</button>
             <button id="batchDelete" class="danger">🗑️ 批量删除</button>
+            <!-- 新增残留脏数据校验清理按钮 -->
+            <button class="warn" onclick="checkAndCleanOrphanNotes()">🔧 校验清理残留备注</button>
             
             <button class="copy" onclick="copySelectedFileNames()">📋 批量复制纯文件名</button>
 
@@ -526,7 +528,6 @@ window.runAutoDelete = async function(){
     let dl = allFiles.filter(i => i.created_at && i.created_at.split('T')[0] < bd).map(i => i.name);
     if(dl.length === 0){ alert("无过期文件"); return; }
     if(!confirm(`将删除${dl.length}个过期文件，确认？`)) return;
-    // 自动清理：先删数据库再删存储
     try{
         await sb.from('file_notes').delete().in('file_name', dl);
         await sb.storage.from("files").remove(dl);
@@ -688,13 +689,12 @@ document.getElementById("fileInput").onchange = async e => {
     loadAllFiles();
 };
 
-// ========== 【核心修复删除逻辑：先删数据库，再删存储，双重捕获异常】 ==========
+// 单文件删除 先删数据库再删存储，分段捕获异常
 window.delOne = async storeName => {
     if(!confirm("确定删除该文件？删除后无法恢复")) return;
     let dbDelOk = true;
     let storageDelOk = true;
     try {
-        // 第一步：删除数据库记录
         const { dbErr } = await sb.from('file_notes').delete().eq('file_name', storeName);
         if(dbErr) throw dbErr;
     } catch (err) {
@@ -702,20 +702,19 @@ window.delOne = async storeName => {
         alert(`数据库备注记录删除失败：${err.message}`);
     }
     try {
-        // 第二步：删除存储桶文件
         const { storageErr } = await sb.storage.from("files").remove([storeName]);
         if(storageErr) throw storageErr;
     } catch (err) {
         storageDelOk = false;
         alert(`存储文件删除失败：${err.message}`);
     }
-    // 任意一处删除成功都刷新列表
     if(dbDelOk || storageDelOk){
         alert("删除操作执行完成，页面刷新");
         loadAllFiles();
     }
 }
 
+// 批量删除 先删数据库再删存储，分段捕获异常
 document.getElementById("batchDelete").onclick = async () => {
     let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(arr.length === 0){ alert("请先勾选文件"); return; }
@@ -736,6 +735,43 @@ document.getElementById("batchDelete").onclick = async () => {
     }
     if(dbDelOk || storageDelOk){
         alert("批量删除执行完成，页面刷新");
+        loadAllFiles();
+    }
+}
+
+// 【新增】校验清理残留备注函数：检测数据库存在但存储已删除的脏数据
+window.checkAndCleanOrphanNotes = async function() {
+    alert("开始校验数据，请稍等，文件数量越多等待时间越长");
+    // 1. 获取存储桶真实存在文件列表
+    const { data: storageList, error: storageErr } = await sb.storage.from("files").list();
+    if(storageErr) return alert("读取存储桶文件列表失败："+storageErr.message);
+    const existStoreSet = new Set(storageList.map(item => item.name));
+
+    // 2. 获取全部备注表记录
+    const { data: allNoteRows, error: noteTableErr } = await sb.from("file_notes").select("file_name");
+    if(noteTableErr) return alert("读取备注数据表失败："+noteTableErr.message);
+
+    // 3. 筛选脏数据：数据库有记录、存储桶无文件
+    const orphanFileList = allNoteRows
+        .map(row => row.file_name)
+        .filter(fileName => !existStoreSet.has(fileName));
+    
+    if(orphanFileList.length === 0) {
+        return alert("校验完成，不存在残留脏备注记录");
+    }
+
+    // 4. 确认清理
+    if(!confirm(`检测到【${orphanFileList.length}】条残留备注记录（对应文件已从存储删除，仅数据库遗留），确认一键删除全部？`)) return;
+    
+    // 5. 批量删除脏数据
+    const { error: delErr } = await sb.from("file_notes")
+        .delete()
+        .in("file_name", orphanFileList);
+    
+    if(delErr) {
+        alert(`清理残留记录失败：${delErr.message}`);
+    } else {
+        alert(`成功清理${orphanFileList.length}条残留脏数据，页面自动刷新`);
         loadAllFiles();
     }
 }
