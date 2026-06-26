@@ -233,10 +233,8 @@
 
 <script>
 const FIX_PWD = "123456";
-// ========== 全局配置项（按需修改这里即可） ==========
-const AUTO_REFRESH_INTERVAL = 10000;  // 自动刷新间隔：10秒(单位ms)
-const IDLE_RESTORE_TIME = 30000;      // 闲置恢复自动刷新：30秒(单位ms)
-// =================================================
+const AUTO_REFRESH_INTERVAL = 10000;
+const IDLE_RESTORE_TIME = 30000;
 
 let autoRefreshTimer;
 let currentLoginUser = "";
@@ -292,9 +290,11 @@ function getPureFileName(name){
     return name.lastIndexOf('.') > 0 ? name.substring(0, name.lastIndexOf('.')) : name;
 }
 
-window.copySingleFileName = async function(filename){
+window.copySingleFileName = async function(storeName){
     try {
-        let pure = getPureFileName(filename);
+        const note = fileNotes[storeName] || "";
+        const realName = getDisplayFileName(storeName, note);
+        let pure = getPureFileName(realName);
         await navigator.clipboard.writeText(pure);
         alert("复制成功：" + pure);
     }catch(e){ alert("复制失败，请重试") }
@@ -303,7 +303,10 @@ window.copySingleFileName = async function(filename){
 window.copySelectedFileNames = async function(){
     let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(arr.length === 0){ alert("请先勾选文件"); return; }
-    let text = arr.map(getPureFileName).join(",");
+    let text = arr.map(storeName=>{
+        const note = fileNotes[storeName]||"";
+        return getPureFileName(getDisplayFileName(storeName,note));
+    }).join(",");
     try {
         await navigator.clipboard.writeText(text);
         alert("批量复制成功！\n" + text);
@@ -393,34 +396,43 @@ window.setQuickDate = function(type){
     renderFiles();
 }
 
-window.saveFileNote = async function(filename,el){
-    let note = el.value.trim();
-    fileNotes[filename] = note;
+window.saveFileNote = async function(storeName,el){
+    let noteInputVal = el.value.trim();
+    const oldFullNote = fileNotes[storeName] || "";
+    const originName = oldFullNote.split("|||")[1] || "";
+    const newFullNote = `${noteInputVal}|||${originName}`;
+    fileNotes[storeName] = newFullNote;
     try {
-        await sb.from('file_notes').upsert([{ file_name: filename, note: note }]);
+        await sb.from('file_notes').upsert([{ file_name: storeName, note: newFullNote }]);
     } catch (e) {}
 }
 
-window.clearSingleNote = async function(filename){
+window.clearSingleNote = async function(storeName){
     if(!confirm("确定清空该文件的备注吗？")) return;
-    fileNotes[filename] = "";
-    await sb.from('file_notes').upsert([{ file_name: filename, note: "" }]);
+    const oldFullNote = fileNotes[storeName] || "";
+    const originName = oldFullNote.split("|||")[1] || "";
+    const newFullNote = `|||${originName}`;
+    fileNotes[storeName] = newFullNote;
+    await sb.from('file_notes').upsert([{ file_name: storeName, note: newFullNote }]);
     renderFiles();
 }
 
 window.batchAddNote = async function(){
     let noteText = document.getElementById('batchNoteInput').value.trim();
     if(!noteText){ alert("请输入要添加的备注内容"); return; }
-    let selectedFiles = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
-    if(selectedFiles.length === 0){ alert("请先勾选文件"); return; }
+    let selectedStores = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+    if(selectedStores.length === 0){ alert("请先勾选文件"); return; }
 
-    if(!confirm(`确定为选中的 ${selectedFiles.length} 个文件添加备注内容："${noteText}"？`)) return;
+    if(!confirm(`确定为选中的 ${selectedStores.length} 个文件添加备注内容："${noteText}"？`)) return;
 
-    for(let name of selectedFiles){
-        let oldNote = fileNotes[name] || "";
-        let newNote = oldNote ? `${oldNote} ${noteText}` : noteText;
-        fileNotes[name] = newNote;
-        await sb.from('file_notes').upsert([{ file_name: name, note: newNote }]);
+    for(let store of selectedStores){
+        let fullNote = fileNotes[store] || "";
+        const uploader = fullNote.split("|||")[0] || "";
+        const origin = fullNote.split("|||")[1] || "";
+        let newUploader = uploader ? `${uploader} ${noteText}` : noteText;
+        const newFull = `${newUploader}|||${origin}`;
+        fileNotes[store] = newFull;
+        await sb.from('file_notes').upsert([{ file_name: store, note: newFull }]);
     }
     alert("批量添加备注完成！");
     document.getElementById('batchNoteInput').value = "";
@@ -428,13 +440,16 @@ window.batchAddNote = async function(){
 }
 
 window.batchClearNote = async function(){
-    let selectedFiles = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
-    if(selectedFiles.length === 0){ alert("请先勾选文件"); return; }
-    if(!confirm(`确定清空选中的 ${selectedFiles.length} 个文件的备注吗？`)) return;
+    let selectedStores = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
+    if(selectedStores.length === 0){ alert("请先勾选文件"); return; }
+    if(!confirm(`确定清空选中的 ${selectedStores.length} 个文件的备注吗？`)) return;
 
-    for(let name of selectedFiles){
-        fileNotes[name] = "";
-        await sb.from('file_notes').upsert([{ file_name: name, note: "" }]);
+    for(let store of selectedStores){
+        let fullNote = fileNotes[store] || "";
+        const origin = fullNote.split("|||")[1] || "";
+        const newFull = `|||${origin}`;
+        fileNotes[store] = newFull;
+        await sb.from('file_notes').upsert([{ file_name: store, note: newFull }]);
     }
     alert("批量清空备注完成！");
     renderFiles();
@@ -576,204 +591,65 @@ window.loadAllFiles = async function(isSilent = false){
     }
 }
 
-function renderFiles(){
-    let searchMode = document.getElementById("searchType").value;
-    let nameKeys = parseMultiKeywords(searchTxt);
-    let noteKeys = parseMultiKeywords(noteSearchTxt);
-
-    filteredFiles = allFiles.filter(f => {
-        let fileName = f.name.toLowerCase();
-        let noteText = (fileNotes[f.name] || "").toLowerCase();
-        let nameOk = true;
-        let noteOk = true;
-        let userOk = true;
-
-        if(nameKeys.length > 0){
-            nameOk = searchMode === 'fuzzy' ? nameKeys.some(k => fileName.includes(k)) : nameKeys.some(k => fileName === k);
-        }
-        if(noteKeys.length > 0){
-            noteOk = searchMode === 'fuzzy' ? noteKeys.some(k => noteText.includes(k)) : noteKeys.some(k => noteText === k);
-        }
-        if(selectedUserFilters.length > 0){
-            userOk = selectedUserFilters.some(user => noteText.includes(user));
-        }
-
-        let t = f.created_at || f.updated_at || '';
-        let dateOk = true;
-        if(dateStart && t){
-            let d = t.split('T')[0];
-            if(dateStart && d < dateStart) dateOk = false;
-            if(dateEnd && d > dateEnd) dateOk = false;
-        }
-        return nameOk && noteOk && userOk && dateOk;
-    });
-
-    document.getElementById('totalCountText').innerText = `总文件数：${filteredFiles.length} 个`;
-    let rangeFiles = allFiles.filter(f => {
-        let t = f.created_at || f.updated_at || '';
-        if(!dateStart && !dateEnd) return true;
-        if(!t) return false;
-        let d = t.split('T')[0];
-        if(dateStart && d < dateStart) return false;
-        if(dateEnd && d > dateEnd) return false;
-        return true;
-    });
-    if(dateStart || dateEnd){
-        document.getElementById('rangeCountText').innerText = `时间段内文件数（${dateStart||'不限'} ~ ${dateEnd||'不限'}）：${rangeFiles.length} 个`;
-    }else{
-        document.getElementById('rangeCountText').innerText = `时间段内文件数：未选择时间范围`;
-    }
-
-    const totalPages = Math.ceil(filteredFiles.length / pageSize) || 1;
-    if(currentPage > totalPages) currentPage = totalPages;
-    const start = (currentPage - 1) * pageSize;
-    const end = start + pageSize;
-    const pageFiles = filteredFiles.slice(start, end);
-
-    let box = document.getElementById("fileBox");
-    if(pageFiles.length === 0){ box.innerHTML = "无匹配文件"; renderPagination(); return; }
-
-    if(viewType === 'list'){
-        let h = "";
-        pageFiles.forEach(f => {
-            let url = sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
-            let size = formatSize(f.metadata?.size);
-            let time = formatTime(f.created_at || f.updated_at);
-            let nowNote = fileNotes[f.name] || "";
-            h += `
-            <div class="file-item">
-                <input type="checkbox" class="file-chk" value="${f.name}" onclick="startUserOperation(); endUserOperation();">
-                <div class="file-info">
-                    <div>${f.name} 
-                        <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-left:6px;">复制</button>
-                    </div>
-                    <div class="file-size-text">大小：${size}</div>
-                    <div class="file-time-text">上传时间：${time}</div>
-                    <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
-                        <input class="note-input" placeholder="填写备注" value="${nowNote}" 
-                            onblur="saveFileNote('${f.name}',this)"
-                            onkeydown="if(event.key==='Enter'){ saveFileNote('${f.name}',this); this.blur(); }">
-                        <button onclick="clearSingleNote('${f.name}')" style="padding:2px 6px;font-size:12px;background:#f56c6c;">清空备注</button>
-                    </div>
-                </div>
-                <div>
-                    <a href="${url}" target="_blank" class="btn-sm" style="background:#909399">预览</a>
-                    <a href="${url}" download="${encodeURIComponent(f.name)}" class="btn-sm" style="background:#67c23a;margin:0 4px;">下载</a>
-                    <button class="small danger" onclick="delOne('${f.name}')">删除</button>
-                </div>
-            </div>`;
-        });
-        box.innerHTML = h;
-    }else{
-        let h = '<div class="file-grid">';
-        pageFiles.forEach(f => {
-            let url = sb.storage.from("files").getPublicUrl(f.name).data.publicUrl;
-            let isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name);
-            let size = formatSize(f.metadata?.size);
-            let time = formatTime(f.created_at || f.updated_at);
-            let nowNote = fileNotes[f.name] || "";
-            h += `
-            <div class="grid-item">
-                <input type="checkbox" class="file-chk" value="${f.name}" onclick="startUserOperation(); endUserOperation();">
-                ${isImg ? `<img src="${url}">` : `<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
-                <div class="name">${f.name}</div>
-                <button onclick="copySingleFileName('${f.name}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-top:4px;">复制纯文件名</button>
-                <div style="font-size:12px;color:#666">${size}</div>
-                <div style="font-size:11px;color:#999">${time}</div>
-                <div style="margin:4px 0;display:flex;align-items:center;gap:4px;justify-content:center;">
-                    <input class="note-input" style="width:80px" placeholder="备注" value="${nowNote}" 
-                        onblur="saveFileNote('${f.name}',this)"
-                        onkeydown="if(event.key==='Enter'){ saveFileNote('${f.name}',this); this.blur(); }">
-                    <button onclick="clearSingleNote('${f.name}')" style="padding:2px 4px;font-size:11px;background:#f56c6c;">清空</button>
-                </div>
-                <div style="margin-top:6px;display:flex;gap:4px;justify-content:center;">
-                    <a href="${url}" target="_blank" class="btn-sm" style="font-size:11px;background:#909399">预览</a>
-                    <a href="${url}" download="${encodeURIComponent(f.name)}" class="btn-sm" style="font-size:11px;background:#67c23a">下载</a>
-                    <button class="small danger" style="font-size:11px" onclick="delOne('${f.name}')">删除</button>
-                </div>
-            </div>`;
-        });
-        h += "</div>";
-        box.innerHTML = h;
-    }
-    renderPagination();
+// 拆分备注获取前端展示原始文件名
+function getDisplayFileName(storeName, noteStr) {
+    if (!noteStr || !noteStr.includes("|||")) return storeName;
+    const splitArr = noteStr.split("|||");
+    return splitArr[1] || storeName;
 }
 
-function renderPagination(){
-    const total = filteredFiles.length;
-    const totalPages = Math.ceil(total / pageSize) || 1;
-    const pager = document.getElementById('pageBtns');
-    const info = document.getElementById('pageInfo');
-    let html = '';
-    html += `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>上一页</button>`;
-    let startPage = Math.max(1, currentPage - 5);
-    let endPage = Math.min(totalPages, currentPage + 4);
-    for(let i=startPage; i<=endPage; i++){
-        html += `<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
-    }
-    html += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage>=totalPages?'disabled':''}>下一页</button>`;
-    pager.innerHTML = html;
-    info.innerText = `第 ${currentPage} / ${totalPages} 页，共 ${total} 条`;
-}
-
-window.goPage = function(page){
-    const totalPages = Math.ceil(filteredFiles.length / pageSize) || 1;
-    if(page < 1 || page > totalPages) return;
-    currentPage = page; renderFiles();
-}
-
-// ============ 优化上传：捕获每个文件上传异常，单独报错 ============
+// 上传核心逻辑：存储文件名加时间戳前缀，解决WJZJ2M42这类短大写串拦截
 document.getElementById("fileInput").onchange = async e => {
     const fs = e.target.files;
-    // 仅剔除存储系统禁止的字符：\ / : * ? " < > | 制表、换行、控制字符
     const illegalChars = /[\\\/:*?"<>|\t\n\r\0-\x1F\x7F]/g;
-    // 获取现有全部文件名用于查重，避免覆盖
     const existNames = allFiles.map(item => item.name);
 
     let successCount = 0;
     let failMsg = "";
 
     for (const f of fs) {
-        // 第一步：清理非法字符
-        let safeName = f.name.replace(illegalChars, '');
-        // 兜底防止空文件名
+        const originFileName = f.name;
+        let safeName = originFileName.replace(illegalChars, '');
         if (!safeName) safeName = `未命名_${Date.now()}`;
 
-        // 第二步：重名自动加数字后缀
-        let finalName = safeName;
+        // 增加时间戳前缀规避supabase拦截纯字母数字短文件名
+        const randomPrefix = Date.now() + "_";
+        let storageFileName = randomPrefix + safeName;
+
+        // 重名后缀处理
         let repeatNum = 1;
-        while (existNames.includes(finalName)) {
-            const dotIndex = finalName.lastIndexOf('.');
+        while (existNames.includes(storageFileName)) {
+            const dotIndex = storageFileName.lastIndexOf('.');
             if (dotIndex > 0) {
-                const namePart = finalName.slice(0, dotIndex);
-                const extPart = finalName.slice(dotIndex);
-                finalName = `${namePart}_${repeatNum}${extPart}`;
+                const namePart = storageFileName.slice(0, dotIndex);
+                const extPart = storageFileName.slice(dotIndex);
+                storageFileName = `${namePart}_${repeatNum}${extPart}`;
             } else {
-                finalName = `${finalName}_${repeatNum}`;
+                storageFileName = `${storageFileName}_${repeatNum}`;
             }
             repeatNum++;
         }
-        existNames.push(finalName);
+        existNames.push(storageFileName);
 
-        // 单个文件上传捕获异常
         try {
-            const { error } = await sb.storage.from("files").upload(finalName, f);
+            const { error } = await sb.storage.from("files").upload(storageFileName, f);
             if (error) throw error;
-
-            // 上传成功，写入备注
-            await sb.from('file_notes').upsert([{ file_name: finalName, note: currentLoginUser }]);
+            // 备注格式：上传人|||原始文件名
+            await sb.from('file_notes').upsert([{
+                file_name: storageFileName,
+                note: `${currentLoginUser}|||${originFileName}`
+            }]);
             successCount++;
         } catch (err) {
-            console.error(`文件【${f.name}】上传失败：`, err);
-            failMsg += `文件：${f.name}\n错误信息：${err.message || err}\n\n`;
+            console.error(`文件【${originFileName}】上传失败：`, err);
+            failMsg += `文件：${originFileName}\n错误：${err.message}\n\n`;
         }
     }
 
-    // 汇总弹窗提示
     if (failMsg) {
-        alert(`本次上传完成，成功：${successCount} 个，失败：${fs.length - successCount} 个\n\n失败列表：\n${failMsg}`);
+        alert(`上传完成，成功${successCount}个，失败${fs.length - successCount}个\n失败明细：\n${failMsg}`);
     } else {
-        alert(`全部上传成功！共 ${successCount} 个文件，已自动填写上传人姓名备注`);
+        alert(`全部上传成功，共${successCount}个文件`);
     }
 
     e.target.value = "";
@@ -781,21 +657,21 @@ document.getElementById("fileInput").onchange = async e => {
     loadAllFiles();
 };
 
-window.delOne = async name => {
-    if(!confirm("确定删除？")) return;
+window.delOne = async storeName => {
+    if(!confirm("确定删除该文件？")) return;
     try {
-        await sb.storage.from("files").remove([name]);
-        await sb.from('file_notes').delete().eq('file_name', name);
+        await sb.storage.from("files").remove([storeName]);
+        await sb.from('file_notes').delete().eq('file_name', storeName);
         loadAllFiles();
     } catch (err) {
-        alert(`删除文件【${name}】失败：${err.message}`);
+        alert(`删除失败：${err.message}`);
     }
 }
 
 document.getElementById("batchDelete").onclick = async () => {
     let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(arr.length === 0){ alert("请先勾选文件"); return; }
-    if(!confirm(`确定删除 ${arr.length} 个文件？`)) return;
+    if(!confirm(`确定删除选中${arr.length}个文件？`)) return;
     try {
         await sb.storage.from("files").remove(arr);
         await sb.from('file_notes').delete().in('file_name', arr);
@@ -823,33 +699,209 @@ document.getElementById("batchDownload").onclick = async () => {
         const zip = new JSZip();
         const promises = [];
 
-        for (const name of arr) {
-            const url = sb.storage.from("files").getPublicUrl(name).data.publicUrl;
+        for (const storeName of arr) {
+            const url = sb.storage.from("files").getPublicUrl(storeName).data.publicUrl;
             const encodedUrl = encodeURI(url);
+            const note = fileNotes[storeName] || "";
+            const showName = getDisplayFileName(storeName, note);
             const promise = fetch(encodedUrl)
                 .then(res => res.blob())
-                .then(blob => {
-                    // binary:true 解决压缩包内中文/特殊文件名乱码
-                    zip.file(name, blob, { binary: true });
-                });
+                .then(blob => zip.file(showName, blob, { binary: true }));
             promises.push(promise);
         }
 
         await Promise.all(promises);
-
         const content = await zip.generateAsync({ type: 'blob' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(content);
         const date = new Date().toLocaleString().replace(/[/:, ]/g, '-');
         link.download = `文件批量下载_${date}.zip`;
         link.click();
-        
-        alert(`批量下载完成！共 ${arr.length} 个文件`);
+        alert(`批量下载完成，共${arr.length}个文件`);
     } catch (err) {
-        console.error('批量下载失败：', err);
+        console.error('批量下载失败', err);
         alert('批量下载失败：' + err.message);
     }
 };
+
+function renderPagination(){
+    const total = filteredFiles.length;
+    const totalPages = Math.ceil(total / pageSize) || 1;
+    const pager = document.getElementById('pageBtns');
+    const info = document.getElementById('pageInfo');
+    let html = '';
+    html += `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage<=1?'disabled':''}>上一页</button>`;
+    let startPage = Math.max(1, currentPage - 5);
+    let endPage = Math.min(totalPages, currentPage + 4);
+    for(let i=startPage; i<=endPage; i++){
+        html += `<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
+    }
+    html += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage>=totalPages?'disabled':''}>下一页</button>`;
+    pager.innerHTML = html;
+    info.innerText = `第 ${currentPage} / ${totalPages} 页，共 ${total} 条`;
+}
+
+window.goPage = function(page){
+    const totalPages = Math.ceil(filteredFiles.length / pageSize) || 1;
+    if(page < 1 || page > totalPages) return;
+    currentPage = page; renderFiles();
+}
+
+// 重写渲染函数，展示原始文件名、搜索匹配原名、筛选上传人
+function renderFiles(){
+    let searchMode = document.getElementById("searchType").value;
+    let nameKeys = parseMultiKeywords(searchTxt);
+    let noteKeys = parseMultiKeywords(noteSearchTxt);
+
+    filteredFiles = allFiles.filter(f => {
+        const storeName = f.name;
+        const fullNote = fileNotes[storeName] || "";
+        const realFileName = getDisplayFileName(storeName, fullNote);
+        const displayLower = realFileName.toLowerCase();
+        const uploader = fullNote.split("|||")[0] || "";
+        const pureNoteText = uploader.toLowerCase();
+
+        let nameOk = true;
+        let noteOk = true;
+        let userOk = true;
+
+        // 文件名搜索
+        if(nameKeys.length > 0){
+            if(searchMode === 'fuzzy'){
+                nameOk = nameKeys.some(k => displayLower.includes(k));
+            }else{
+                nameOk = nameKeys.some(k => displayLower === k);
+            }
+        }
+        // 备注搜索
+        if(noteKeys.length > 0){
+            if(searchMode === 'fuzzy'){
+                noteOk = noteKeys.some(k => pureNoteText.includes(k));
+            }else{
+                noteOk = noteKeys.some(k => pureNoteText === k);
+            }
+        }
+        // 上传人筛选
+        if(selectedUserFilters.length > 0){
+            userOk = selectedUserFilters.includes(uploader);
+        }
+        // 时间筛选
+        let fileTime = f.created_at || f.updated_at || '';
+        let dateOk = true;
+        if(dateStart && fileTime){
+            const dayStr = fileTime.split('T')[0];
+            if(dayStr < dateStart) dateOk = false;
+        }
+        if(dateEnd && fileTime){
+            const dayStr = fileTime.split('T')[0];
+            if(dayStr > dateEnd) dateOk = false;
+        }
+        return nameOk && noteOk && userOk && dateOk;
+    });
+
+    document.getElementById('totalCountText').innerText = `总文件数：${filteredFiles.length} 个`;
+    let rangeFiles = allFiles.filter(f => {
+        let t = f.created_at || f.updated_at || '';
+        if(!dateStart && !dateEnd) return true;
+        if(!t) return false;
+        let d = t.split('T')[0];
+        if(dateStart && d < dateStart) return false;
+        if(dateEnd && d > dateEnd) return false;
+        return true;
+    });
+    if(dateStart || dateEnd){
+        document.getElementById('rangeCountText').innerText = `时间段内文件数（${dateStart||'不限'} ~ ${dateEnd||'不限'}）：${rangeFiles.length} 个`;
+    }else{
+        document.getElementById('rangeCountText').innerText = `时间段内文件数：未选择时间范围`;
+    }
+
+    const totalPages = Math.ceil(filteredFiles.length / pageSize) || 1;
+    if(currentPage > totalPages) currentPage = totalPages;
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    const pageFiles = filteredFiles.slice(start, end);
+
+    let box = document.getElementById("fileBox");
+    if(pageFiles.length === 0){
+        box.innerHTML = "无匹配文件";
+        renderPagination();
+        return;
+    }
+
+    if(viewType === 'list'){
+        let h = "";
+        pageFiles.forEach(f => {
+            const storeFileName = f.name;
+            const fullNote = fileNotes[storeFileName] || "";
+            const showName = getDisplayFileName(storeFileName, fullNote);
+            const uploadUser = fullNote.split("|||")[0] || "";
+            const url = sb.storage.from("files").getPublicUrl(storeFileName).data.publicUrl;
+            const size = formatSize(f.metadata?.size);
+            const time = formatTime(f.created_at || f.updated_at);
+
+            h += `
+            <div class="file-item">
+                <input type="checkbox" class="file-chk" value="${storeFileName}" onclick="startUserOperation(); endUserOperation();">
+                <div class="file-info">
+                    <div>${showName}
+                        <button onclick="copySingleFileName('${storeFileName}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-left:6px;">复制</button>
+                        <span style="margin-left:8px;color:#666;font-size:12px;">上传人：${uploadUser}</span>
+                    </div>
+                    <div class="file-size-text">大小：${size}</div>
+                    <div class="file-time-text">上传时间：${time}</div>
+                    <div style="margin-top:4px;display:flex;align-items:center;gap:6px;">
+                        <input class="note-input" placeholder="填写备注" value="${uploadUser}"
+                            onblur="saveFileNote('${storeFileName}',this)"
+                            onkeydown="if(event.key==='Enter'){ saveFileNote('${storeFileName}',this); this.blur(); }">
+                        <button onclick="clearSingleNote('${storeFileName}')" style="padding:2px 6px;font-size:12px;background:#f56c6c;">清空备注</button>
+                    </div>
+                </div>
+                <div>
+                    <a href="${url}" target="_blank" class="btn-sm" style="background:#909399">预览</a>
+                    <a href="${url}" download="${encodeURIComponent(showName)}" class="btn-sm" style="background:#67c23a;margin:0 4px;">下载</a>
+                    <button class="small danger" onclick="delOne('${storeFileName}')">删除</button>
+                </div>
+            </div>`;
+        });
+        box.innerHTML = h;
+    }else{
+        let h = '<div class="file-grid">';
+        pageFiles.forEach(f => {
+            const storeFileName = f.name;
+            const fullNote = fileNotes[storeFileName] || "";
+            const showName = getDisplayFileName(storeFileName, fullNote);
+            const uploadUser = fullNote.split("|||")[0] || "";
+            const url = sb.storage.from("files").getPublicUrl(storeFileName).data.publicUrl;
+            const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(storeFileName);
+            const size = formatSize(f.metadata?.size);
+            const time = formatTime(f.created_at || f.updated_at);
+
+            h += `
+            <div class="grid-item">
+                <input type="checkbox" class="file-chk" value="${storeFileName}" onclick="startUserOperation(); endUserOperation();">
+                ${isImg ? `<img src="${url}">` : `<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
+                <div class="name">${showName}</div>
+                <button onclick="copySingleFileName('${storeFileName}')" style="padding:2px 6px;font-size:12px;background:#19b500;margin-top:4px;">复制纯文件名</button>
+                <div style="font-size:12px;color:#666">${size}</div>
+                <div style="font-size:11px;color:#999">${time}</div>
+                <div style="margin:4px 0;display:flex;align-items:center;gap:4px;justify-content:center;">
+                    <input class="note-input" style="width:80px" placeholder="备注" value="${uploadUser}"
+                        onblur="saveFileNote('${storeFileName}',this)"
+                        onkeydown="if(event.key==='Enter'){ saveFileNote('${storeFileName}',this); this.blur(); }">
+                    <button onclick="clearSingleNote('${storeFileName}')" style="padding:2px 4px;font-size:11px;background:#f56c6c;">清空</button>
+                </div>
+                <div style="margin-top:6px;display:flex;gap:4px;justify-content:center;">
+                    <a href="${url}" target="_blank" class="btn-sm" style="font-size:11px;background:#909399">预览</a>
+                    <a href="${url}" download="${encodeURIComponent(showName)}" class="btn-sm" style="font-size:11px;background:#67c23a">下载</a>
+                    <button class="small danger" style="font-size:11px" onclick="delOne('${storeFileName}')">删除</button>
+                </div>
+            </div>`;
+        });
+        h += "</div>";
+        box.innerHTML = h;
+    }
+    renderPagination();
+}
 
 function startAutoRefresh(){
     if(autoRefreshTimer) clearInterval(autoRefreshTimer);
