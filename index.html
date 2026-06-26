@@ -439,7 +439,7 @@ window.batchAddNote = async function(){
     let selectedStores = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(selectedStores.length === 0){ alert("请先勾选文件"); return; }
 
-    if(!confirm(`确定为选中 ${selectedStores.length} 个文件添加备注："${noteText}"？`)) return;
+    if(!confirm(`确定为选中的 ${selectedStores.length} 个文件添加备注内容："${noteText}"？`)) return;
 
     for(let store of selectedStores){
         let meta = getFileMeta(store);
@@ -460,7 +460,7 @@ window.batchAddNote = async function(){
 window.batchClearNote = async function(){
     let selectedStores = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(selectedStores.length === 0){ alert("请先勾选文件"); return; }
-    if(!confirm(`确定清空选中 ${selectedStores.length} 个文件的备注？`)) return;
+    if(!confirm(`确定清空选中的 ${selectedStores.length} 个文件的备注？`)) return;
 
     for(let store of selectedStores){
         let meta = getFileMeta(store);
@@ -765,19 +765,20 @@ window.goPage = function(page){
     currentPage = page; renderFiles();
 }
 
-// 核心修复：计数逻辑分离，解决筛选数量不匹配
+// 修复：上传人筛选增加去空格兼容，计数逻辑分离解决数量不匹配
 function renderFiles(){
     let searchMode = document.getElementById("searchType").value;
     let nameKeys = parseMultiKeywords(searchTxt);
     let noteKeys = parseMultiKeywords(noteSearchTxt);
 
-    // 基础过滤：文件名+备注+上传人，不包含时间
+    // 基础过滤：文件名+备注+上传人，不包含时间，上传人自动去除首尾空格
     function matchBaseFilter(f){
         const storeName = f.name;
         const meta = getFileMeta(storeName);
         const realFileName = getDisplayFileName(storeName);
         const displayLower = realFileName.toLowerCase();
-        const uploader = meta.uploader || "";
+        // 去除首尾空格，解决复选框和数据库文字空格不一致匹配失败
+        const uploader = (meta.uploader || "").trim();
         const pureNoteText = meta.note.toLowerCase();
 
         let nameOk = true;
@@ -798,8 +799,10 @@ function renderFiles(){
                 noteOk = noteKeys.some(k => pureNoteText === k);
             }
         }
+        // 上传人筛选数组同步去空格对比
         if(selectedUserFilters.length > 0){
-            userOk = selectedUserFilters.includes(uploader);
+            const cleanFilterUsers = selectedUserFilters.map(u => u.trim());
+            userOk = cleanFilterUsers.includes(uploader);
         }
         return nameOk && noteOk && userOk;
     }
@@ -821,7 +824,7 @@ function renderFiles(){
         return dateOk;
     });
 
-    // 展示文字区分两个统计口径，不会混淆
+    // 文字区分两个统计口径，一眼看懂不会混淆
     document.getElementById('totalCountText').innerText = `筛选(文件名/备注/上传人)总文件数：${baseFiles.length} 个`;
     if(dateStart || dateEnd){
         document.getElementById('rangeCountText').innerText = `叠加时间(${dateStart||'不限'} ~ ${dateEnd||'不限'})后展示文件数：${filteredFiles.length} 个`;
@@ -848,7 +851,7 @@ function renderFiles(){
             const storeFileName = f.name;
             const meta = getFileMeta(storeFileName);
             const showName = getDisplayFileName(storeFileName);
-            const uploadUser = meta.uploader || "";
+            const uploadUser = (meta.uploader || "").trim();
             const fileNote = meta.note || "";
             const url = sb.storage.from("files").getPublicUrl(storeFileName).data.publicUrl;
             const size = formatSize(f.metadata?.size);
@@ -885,7 +888,7 @@ function renderFiles(){
             const storeFileName = f.name;
             const meta = getFileMeta(storeFileName);
             const showName = getDisplayFileName(storeFileName);
-            const uploadUser = meta.uploader || "";
+            const uploadUser = (meta.uploader || "").trim();
             const fileNote = meta.note || "";
             const url = sb.storage.from("files").getPublicUrl(storeFileName).data.publicUrl;
             const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(storeFileName);
