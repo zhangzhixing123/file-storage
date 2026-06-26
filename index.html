@@ -294,10 +294,21 @@ function getFileMeta(storeName){
     return fileMeta[storeName] || { uploader:"", note:"", origin_name:storeName };
 }
 
+// 【核心修复】处理EMPTY/空origin_name，自动截取带下划线存储名后半段真实文件名
 function getDisplayFileName(storeName) {
     const meta = getFileMeta(storeName);
-    // 优先原始上传文件名，为空再取存储文件名
-    return meta.origin_name && meta.origin_name !== "EMPTY" ? meta.origin_name : storeName;
+    // 判断origin_name为空、空字符串、大写EMPTY
+    if (!meta.origin_name || meta.origin_name.trim() === "" || meta.origin_name.trim().toUpperCase() === "EMPTY") {
+        // 分割存储文件名，去掉前面时间戳前缀
+        const nameParts = storeName.split("_");
+        // 至少两段：时间_文件名，拼接后面全部
+        if (nameParts.length >= 2) {
+            return nameParts.slice(1).join("_");
+        }
+        return storeName;
+    }
+    // 正常有原始文件名直接返回
+    return meta.origin_name.trim();
 }
 
 window.copySingleFileName = async function(storeName){
@@ -440,7 +451,7 @@ window.batchAddNote = async function(){
     let selectedStores = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(selectedStores.length === 0){ alert("请先勾选文件"); return; }
 
-    if(!confirm(`确定为选中 ${selectedStores.length} 个文件添加备注："${noteText}"？`)) return;
+    if(!confirm(`确定为选中的 ${selectedStores.length} 个文件添加备注内容："${noteText}"？`)) return;
 
     for(let store of selectedStores){
         let meta = getFileMeta(store);
@@ -461,7 +472,7 @@ window.batchAddNote = async function(){
 window.batchClearNote = async function(){
     let selectedStores = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(selectedStores.length === 0){ alert("请先勾选文件"); return; }
-    if(!confirm(`确定清空选中 ${selectedStores.length} 个文件的备注？`)) return;
+    if(!confirm(`确定清空选中的 ${selectedStores.length} 个文件的备注？`)) return;
 
     for(let store of selectedStores){
         let meta = getFileMeta(store);
@@ -722,6 +733,7 @@ document.getElementById("batchDownload").onclick = async () => {
         for (const storeName of arr) {
             const url = sb.storage.from("files").getPublicUrl(storeName).data.publicUrl;
             const encodedUrl = encodeURI(url);
+            // 统一调用修复后的函数获取真实文件名
             const showName = getDisplayFileName(storeName);
             const promise = fetch(encodedUrl)
                 .then(res => res.blob())
@@ -766,19 +778,16 @@ window.goPage = function(page){
     currentPage = page; renderFiles();
 }
 
-// 修复：计数逻辑分离、上传人空格兼容、下载使用原始文件名
 function renderFiles(){
     let searchMode = document.getElementById("searchType").value;
     let nameKeys = parseMultiKeywords(searchTxt);
     let noteKeys = parseMultiKeywords(noteSearchTxt);
 
-    // 基础过滤：文件名+备注+上传人，不包含时间
     function matchBaseFilter(f){
         const storeName = f.name;
         const meta = getFileMeta(storeName);
         const realFileName = getDisplayFileName(storeName);
         const displayLower = realFileName.toLowerCase();
-        // 去除首尾空格，防止数据库/复选框空格不匹配
         const uploader = (meta.uploader || "").trim();
         const pureNoteText = meta.note.toLowerCase();
 
@@ -801,8 +810,8 @@ function renderFiles(){
             }
         }
         if(selectedUserFilters.length > 0){
-            const filterUsers = selectedUserFilters.map(u => u.trim());
-            userOk = filterUsers.includes(uploader);
+            const cleanFilterUsers = selectedUserFilters.map(u => u.trim());
+            userOk = cleanFilterUsers.includes(uploader);
         }
         return nameOk && noteOk && userOk;
     }
@@ -873,7 +882,7 @@ function renderFiles(){
                 </div>
                 <div>
                     <a href="${url}" target="_blank" class="btn-sm" style="background:#909399">预览</a>
-                    <!-- download 直接使用原始上传文件名 -->
+                    <!-- 单文件下载统一调用修复函数获取真实文件名 -->
                     <a href="${url}" download="${encodeURIComponent(showName)}" class="btn-sm" style="background:#67c23a;margin:0 4px;">下载</a>
                     <button class="small danger" onclick="delOne('${storeFileName}')">删除</button>
                 </div>
@@ -910,6 +919,7 @@ function renderFiles(){
                 </div>
                 <div style="margin-top:6px;display:flex;gap:4px;justify-content:center;">
                     <a href="${url}" target="_blank" class="btn-sm" style="font-size:11px;background:#909399">预览</a>
+                    <!-- 九宫格下载同样使用修复后的原始文件名 -->
                     <a href="${url}" download="${encodeURIComponent(showName)}" class="btn-sm" style="font-size:11px;background:#67c23a">下载</a>
                     <button class="small danger" style="font-size:11px" onclick="delOne('${storeFileName}')">删除</button>
                 </div>
