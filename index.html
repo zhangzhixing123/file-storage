@@ -161,7 +161,6 @@
             <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
             <button id="batchDownload">📥 批量下载</button>
             <button id="batchDelete" class="danger">🗑️ 批量删除</button>
-            <!-- 新增一键校验清理残留存储文件按钮 -->
             <button class="warn" onclick="batchCheckAndDelStorage()">🔍 批量校验删除后台残留文件</button>
             <button class="warn" onclick="checkAndCleanOrphanNotes()">🔧 校验清理残留备注</button>
             
@@ -521,16 +520,16 @@ document.getElementById('delDaySelect').addEventListener('change',function(){
     setDelText();
 })
 
-// ========== 修复自动清理过期文件：先校验存储、先删存储再删数据库 ==========
+// 修复自动删除：先校验存储真实存在、先删存储后删数据库，杜绝删不掉残留占用
 window.runAutoDelete = async function(){
     let day = parseInt(document.getElementById('delDaySelect').value);
     if(day === 0){ alert("请选择清理周期"); return; }
     let bd = getBeforeDayStr(day);
-    // 1. 获取桶全部真实文件
+    // 拉取桶全部真实文件，只以存储真实存在为准
     const { data: bucketAll, errList } = await sb.storage.from("files").list();
     if(errList) return alert("读取存储文件失败："+errList.message);
     const realSet = new Set(bucketAll.map(i=>i.name));
-    // 2. 筛选过期且真实存在的文件
+    // 筛选：过期 + 存储真实存在
     let expiredRealFiles = allFiles.filter(i => {
         const cTime = i.created_at || i.updated_at || '';
         const dayStr = cTime.split('T')[0];
@@ -538,21 +537,21 @@ window.runAutoDelete = async function(){
     }).map(i=>i.name);
     if(expiredRealFiles.length === 0){ alert("无过期可清理的存储文件"); return; }
     if(!confirm(`将删除${expiredRealFiles.length}个过期存储文件，确认？`)) return;
-    // 3. 先删存储
+    // 第一步：优先删除存储文件，失败直接终止，不碰数据库
     try{
         await sb.storage.from("files").remove(expiredRealFiles);
     }catch(err){
-        alert(`过期文件存储删除失败：${err.message}，操作终止`);
+        alert(`过期文件存储删除失败：${err.message}，操作终止，数据库不会改动，文件保留`);
         loadAllFiles();
         return;
     }
-    // 4. 存储成功再删数据库备注
+    // 存储删除成功才清理数据库备注
     try{
         await sb.from('file_notes').delete().in('file_name', expiredRealFiles);
     }catch(err){
         alert(`存储文件已删除，数据库备注清理失败，可使用【校验清理残留备注】`);
     }
-    alert("自动清理过期文件完成");
+    alert("自动清理过期文件完成，存储空间已释放");
     loadAllFiles();
 }
 
@@ -563,7 +562,6 @@ async function autoCleanWhenFull(totalBytes){
         let sorted = [...allFiles].sort((a,b)=> new Date(a.created_at||0) - new Date(b.created_at||0));
         let delCount = Math.ceil(sorted.length * 0.1);
         let delList = sorted.slice(0, delCount).map(i=>i.name);
-        // 先删存储再删数据库
         try{
             await sb.storage.from("files").remove(delList);
             await sb.from('file_notes').delete().in('file_name', delList);
@@ -712,10 +710,9 @@ document.getElementById("fileInput").onchange = async e => {
     loadAllFiles();
 };
 
-// ========== 单文件删除：增加存储存在校验，先删存储后删库 ==========
+// 单文件删除：先校验存储存在，先删存储再删数据库
 window.delOne = async storeName => {
     if(!confirm("确定删除该文件？删除后无法恢复")) return;
-    // 校验文件是否存在存储
     const { data: fileList, error: listErr } = await sb.storage.from("files").list("", {
         search: storeName
     });
@@ -756,7 +753,7 @@ window.delOne = async storeName => {
     loadAllFiles();
 }
 
-// ========== 批量勾选删除：批量校验存储，区分脏数据 ==========
+// 批量勾选删除：批量校验存储，区分脏数据与真实文件
 document.getElementById("batchDelete").onclick = async () => {
     let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(arr.length === 0){ alert("请先勾选文件"); return; }
@@ -806,22 +803,26 @@ document.getElementById("batchDelete").onclick = async () => {
     loadAllFiles();
 }
 
-// ========== 新增：批量校验并一键删除后台所有残留存储文件 ==========
+// 批量校验删除后台残留：只删当前页面看不见的文件，不会误删前台展示内容
 window.batchCheckAndDelStorage = async function(){
-    alert("正在加载存储桶全部文件，文件越多等待越久...");
+    alert("正在加载存储桶真实文件与当前筛选列表，文件越多等待越久...");
     const { data: bucketAllFiles, error: listErr } = await sb.storage.from("files").list();
     if(listErr){
         return alert("读取存储桶文件失败：" + listErr.message);
     }
     const realStorageFileSet = new Set(bucketAllFiles.map(item => item.name));
-    const allStoreNames = allFiles.map(f => f.name);
-    const needDelList = allStoreNames.filter(name => realStorageFileSet.has(name));
+    // 当前页面展示的文件集合，完全排除不删除
+    const showFileSet = new Set(filteredFiles.map(f => f.name));
+    // 仅保留：存储存在 + 当前页面不展示 = 后台残留文件
+    const needDelList = Array.from(realStorageFileSet).filter(name => !showFileSet.has(name));
+    
     if(needDelList.length === 0){
-        return alert("校验完成：存储桶无残留待删文件");
+        return alert("校验完成：无后台残留文件，当前页面所有文件完整保留");
     }
-    if(!confirm(`校验发现存储桶存在 ${needDelList.length} 个文件未删除，确认一次性全部删除？删除后空间立即释放！`)){
+    if(!confirm(`校验发现 ${needDelList.length} 个后台隐藏残留文件（当前页面不展示、持续占用存储空间），确认一次性全部删除？前台可见文件不会被触碰！`)){
         return;
     }
+    // 先删存储释放空间
     try{
         await sb.storage.from("files").remove(needDelList);
     }catch(err){
@@ -829,12 +830,13 @@ window.batchCheckAndDelStorage = async function(){
         loadAllFiles();
         return;
     }
+    // 同步清理数据库备注
     try{
         await sb.from("file_notes").delete().in("file_name", needDelList);
     }catch(err){
-        alert(`存储文件已全部删除，但数据库备注清理失败，可使用【校验清理残留备注】处理脏数据`);
+        alert(`残留存储文件已全部删除，但数据库备注清理失败，可使用【校验清理残留备注】处理脏数据`);
     }
-    alert(`批量校验删除完成！共清理 ${needDelList.length} 个后台残留文件，存储空间已释放`);
+    alert(`批量校验删除完成！共清理 ${needDelList.length} 个后台隐藏残留文件，前台展示文件完整保留，存储空间已释放`);
     loadAllFiles();
 }
 
@@ -1057,7 +1059,7 @@ function renderFiles(){
 
             h += `
             <div class="grid-item">
-                <input type="checkbox" class="file-ch${storeFileName}" onclick="startUserOperation(); endUserOperation();">
+                <input type="checkbox" class="file-chk" value="${storeFileName}" onclick="startUserOperation(); endUserOperation();">
                 ${isImg ? `<img src="${url}">` : `<div style="height:120px;line-height:120px;font-size:40px">📄</div>`}
                 <div class="name">${showName}</div>
                 <div style="font-size:12px;color:#409eff">上传人：${uploadUser}</div>
