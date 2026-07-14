@@ -101,6 +101,7 @@
         }
         .batch-note-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
         .batch-note-input{padding:6px 8px;border:1px solid #ddd;border-radius:4px;width:120px;}
+        .refresh-btn {background:#909399;}
     </style>
 </head>
 <body>
@@ -161,10 +162,9 @@
             <button class="warn" onclick="unCheckAll()">☐ 取消全选</button>
             <button id="batchDownload">📥 批量下载</button>
             <button id="batchDelete" class="danger">🗑️ 批量删除</button>
-            <!-- 新增残留脏数据校验清理按钮 -->
             <button class="warn" onclick="checkAndCleanOrphanNotes()">🔧 校验清理残留备注</button>
-            
             <button class="copy" onclick="copySelectedFileNames()">📋 批量复制纯文件名</button>
+            <button class="refresh-btn" onclick="forceRefresh()">🔄 强制刷新</button>
 
             <div class="search-wrap">
                 <select class="search-type-select" id="searchType">
@@ -295,7 +295,6 @@ function getFileMeta(storeName){
     return fileMeta[storeName] || { uploader:"", note:"", origin_name:storeName };
 }
 
-// 修复EMPTY空文件名兜底逻辑
 function getDisplayFileName(storeName) {
     const meta = getFileMeta(storeName);
     if (!meta.origin_name || meta.origin_name.trim() === "" || meta.origin_name.trim().toUpperCase() === "EMPTY") {
@@ -521,32 +520,77 @@ document.getElementById('delDaySelect').addEventListener('change',function(){
     setDelText();
 })
 
+// ========== 优化后的自动清理过期文件 ==========
 window.runAutoDelete = async function(){
     let day = parseInt(document.getElementById('delDaySelect').value);
-    if(day === 0){ alert("请选择清理周期"); return; }
+    if(day === 0){ 
+        alert("请先选择清理周期"); 
+        return; 
+    }
+    
     let bd = getBeforeDayStr(day);
     let dl = allFiles.filter(i => i.created_at && i.created_at.split('T')[0] < bd).map(i => i.name);
-    if(dl.length === 0){ alert("无过期文件"); return; }
-    if(!confirm(`将删除${dl.length}个过期文件，确认？`)) return;
-    try{
-        await sb.from('file_notes').delete().in('file_name', dl);
-        await sb.storage.from("files").remove(dl);
-        alert("清理完成");
-    }catch(err){
-        alert(`清理异常：${err.message}`);
+    
+    if(dl.length === 0){ 
+        alert("✅ 没有过期文件需要清理"); 
+        return; 
     }
+    
+    if(!confirm(`将删除 ${dl.length} 个过期文件（${day}天前），确认？`)) return;
+    
+    let dbDelOk = false;
+    let storageDelOk = false;
+    let errorMsg = [];
+
+    // 删除数据库记录
+    try {
+        const { error } = await sb.from('file_notes').delete().in('file_name', dl);
+        if (error) throw error;
+        dbDelOk = true;
+    } catch (err) {
+        errorMsg.push(`数据库删除失败：${err.message}`);
+        console.error('数据库删除失败:', err);
+    }
+
+    // 删除存储文件
+    try {
+        const { error } = await sb.storage.from("files").remove(dl);
+        if (error) throw error;
+        storageDelOk = true;
+    } catch (err) {
+        errorMsg.push(`存储文件删除失败：${err.message}`);
+        console.error('存储文件删除失败:', err);
+    }
+
+    // 处理结果
+    if (dbDelOk && storageDelOk) {
+        alert(`✅ 清理完成！共删除 ${dl.length} 个过期文件`);
+    } else if (dbDelOk || storageDelOk) {
+        alert(`⚠️ 清理部分成功，但有异常：\n${errorMsg.join('\n')}\n\n页面将刷新`);
+    } else {
+        alert(`❌ 清理失败：\n${errorMsg.join('\n')}`);
+    }
+    
     loadAllFiles();
 }
 
+// ========== 优化后的自动清理当容量满 ==========
 async function autoCleanWhenFull(totalBytes){
     const total = totalStorageGB * 1024*1024*1024;
     const pct = total > 0 ? (totalBytes / total * 100) : 0;
+    
     if(pct >= 99.9){
         let sorted = [...allFiles].sort((a,b)=> new Date(a.created_at||0) - new Date(b.created_at||0));
         let delCount = Math.ceil(sorted.length * 0.1);
         let delList = sorted.slice(0, delCount).map(i=>i.name);
-        await sb.from('file_notes').delete().in('file_name', delList);
-        await sb.storage.from("files").remove(delList);
+        
+        try {
+            await sb.from('file_notes').delete().in('file_name', delList);
+            await sb.storage.from("files").remove(delList);
+            console.log(`✅ 自动清理完成：删除 ${delList.length} 个文件`);
+        } catch (err) {
+            console.error('自动清理失败:', err);
+        }
     }
 }
 
@@ -689,57 +733,93 @@ document.getElementById("fileInput").onchange = async e => {
     loadAllFiles();
 };
 
-// 单文件删除 先删数据库再删存储，分段捕获异常
+// ========== 优化后的单文件删除 ==========
 window.delOne = async storeName => {
     if(!confirm("确定删除该文件？删除后无法恢复")) return;
-    let dbDelOk = true;
-    let storageDelOk = true;
+    
+    let dbDelOk = false;
+    let storageDelOk = false;
+    let errorMsg = [];
+
+    // 1. 先删除数据库备注记录
     try {
-        const { dbErr } = await sb.from('file_notes').delete().eq('file_name', storeName);
-        if(dbErr) throw dbErr;
+        const { error } = await sb.from('file_notes').delete().eq('file_name', storeName);
+        if (error) throw error;
+        dbDelOk = true;
     } catch (err) {
-        dbDelOk = false;
-        alert(`数据库备注记录删除失败：${err.message}`);
+        errorMsg.push(`数据库删除失败：${err.message}`);
+        console.error('数据库删除失败:', err);
     }
+
+    // 2. 再删除存储文件
     try {
-        const { storageErr } = await sb.storage.from("files").remove([storeName]);
-        if(storageErr) throw storageErr;
+        const { error } = await sb.storage.from("files").remove([storeName]);
+        if (error) throw error;
+        storageDelOk = true;
     } catch (err) {
-        storageDelOk = false;
-        alert(`存储文件删除失败：${err.message}`);
+        errorMsg.push(`存储文件删除失败：${err.message}`);
+        console.error('存储文件删除失败:', err);
     }
-    if(dbDelOk || storageDelOk){
-        alert("删除操作执行完成，页面刷新");
+
+    // 3. 处理结果
+    if (dbDelOk && storageDelOk) {
+        alert("✅ 文件删除成功！");
         loadAllFiles();
+    } else if (dbDelOk || storageDelOk) {
+        alert(`⚠️ 部分删除成功，但有异常：\n${errorMsg.join('\n')}\n\n页面将刷新`);
+        loadAllFiles();
+    } else {
+        alert(`❌ 删除失败：\n${errorMsg.join('\n')}`);
     }
 }
 
-// 批量删除 先删数据库再删存储，分段捕获异常
+// ========== 优化后的批量删除 ==========
 document.getElementById("batchDelete").onclick = async () => {
     let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
-    if(arr.length === 0){ alert("请先勾选文件"); return; }
+    if(arr.length === 0) {
+        alert("请先勾选文件");
+        return;
+    }
     if(!confirm(`确定批量删除选中${arr.length}个文件？删除后无法恢复`)) return;
-    let dbDelOk = true;
-    let storageDelOk = true;
+    
+    let dbDelOk = false;
+    let storageDelOk = false;
+    let errorMsg = [];
+    let successCount = arr.length;
+
+    // 1. 批量删除数据库备注记录
     try {
-        await sb.from('file_notes').delete().in('file_name', arr);
+        const { error } = await sb.from('file_notes').delete().in('file_name', arr);
+        if (error) throw error;
+        dbDelOk = true;
     } catch (err) {
-        dbDelOk = false;
-        alert(`批量删除数据库记录异常：${err.message}`);
+        errorMsg.push(`数据库批量删除失败：${err.message}`);
+        console.error('数据库批量删除失败:', err);
     }
+
+    // 2. 批量删除存储文件
     try {
-        await sb.storage.from("files").remove(arr);
+        const { error } = await sb.storage.from("files").remove(arr);
+        if (error) throw error;
+        storageDelOk = true;
     } catch (err) {
-        storageDelOk = false;
-        alert(`批量删除存储文件异常：${err.message}`);
+        errorMsg.push(`存储文件批量删除失败：${err.message}`);
+        console.error('存储文件批量删除失败:', err);
     }
-    if(dbDelOk || storageDelOk){
-        alert("批量删除执行完成，页面刷新");
+
+    // 3. 处理结果
+    if (dbDelOk && storageDelOk) {
+        alert(`✅ 批量删除成功！共删除 ${successCount} 个文件`);
         loadAllFiles();
+    } else if (dbDelOk || storageDelOk) {
+        alert(`⚠️ 批量删除部分成功，但有异常：\n${errorMsg.join('\n')}\n\n页面将刷新`);
+        loadAllFiles();
+    } else {
+        alert(`❌ 批量删除失败：\n${errorMsg.join('\n')}`);
     }
 }
 
-// 【新增】校验清理残留备注函数：检测数据库存在但存储已删除的脏数据
+// ========== 校验清理残留备注 ==========
 window.checkAndCleanOrphanNotes = async function() {
     alert("开始校验数据，请稍等，文件数量越多等待时间越长");
     // 1. 获取存储桶真实存在文件列表
@@ -774,6 +854,12 @@ window.checkAndCleanOrphanNotes = async function() {
         alert(`成功清理${orphanFileList.length}条残留脏数据，页面自动刷新`);
         loadAllFiles();
     }
+}
+
+// ========== 强制刷新 ==========
+window.forceRefresh = function(){
+    loadAllFiles();
+    alert("✅ 已强制刷新文件列表");
 }
 
 document.getElementById("batchDownload").onclick = async () => {
