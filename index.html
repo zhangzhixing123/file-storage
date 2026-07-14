@@ -33,6 +33,7 @@
         button.reload {background:#2c3e50;color:#fff;}
         button.orphan-clean {background:#d63031;color:#fff;}
         button.orphan-view {background:#0984e3;color:#fff;}
+        button.stats {background:#00b894;color:#fff;}
         .search-wrap {display: flex;gap: 5px;flex-wrap: wrap;align-items: center;}
         input.search, input.date-input {padding: 8px 12px;border: 1px solid #ddd;border-radius: 6px;min-width: 150px;}
         .file-item {background: #fff;padding: 10px 12px;margin: 6px 0;border-radius: 8px;display: flex;justify-content: space-between;align-items: center;flex-wrap:wrap;gap:8px;}
@@ -108,6 +109,14 @@
         .refresh-btn {background:#909399;}
         .tool-bar button {font-size:12px;padding:6px 12px;}
         .tool-bar .search-wrap input {font-size:12px;padding:6px 10px;}
+        .orphan-count-badge {
+            background: #f56c6c;
+            color: #fff;
+            border-radius: 50%;
+            padding: 2px 8px;
+            font-size: 11px;
+            margin-left: 4px;
+        }
     </style>
 </head>
 <body>
@@ -172,6 +181,7 @@
             <button class="consistency" onclick="checkAndFixConsistency()">🔗 数据一致性</button>
             <button class="orphan-clean" onclick="quickCleanOrphanFiles()">🧹 一键清理孤儿</button>
             <button class="orphan-view" onclick="viewOrphanFiles()">🔍 查看孤儿文件</button>
+            <button class="stats" onclick="showStorageStats()">📊 存储统计</button>
             <button class="copy" onclick="copySelectedFileNames()">📋 复制文件名</button>
             <button class="reload" onclick="forceReload()">🔄 重载</button>
             <button class="refresh-btn" onclick="forceRefresh()">🔄 刷新</button>
@@ -530,7 +540,7 @@ document.getElementById('delDaySelect').addEventListener('change',function(){
     setDelText();
 })
 
-// ========== 优化后的自动清理过期文件（带重试） ==========
+// ========== 优化后的自动清理过期文件（先删存储，再删数据库） ==========
 window.runAutoDelete = async function(){
     let day = parseInt(document.getElementById('delDaySelect').value);
     if(day === 0){ 
@@ -539,6 +549,10 @@ window.runAutoDelete = async function(){
     }
     
     let bd = getBeforeDayStr(day);
+    
+    // 先重新加载文件列表，确保数据最新
+    await loadAllFiles(true);
+    
     let dl = allFiles.filter(i => i.created_at && i.created_at.split('T')[0] < bd).map(i => i.name);
     
     if(dl.length === 0){ 
@@ -548,53 +562,77 @@ window.runAutoDelete = async function(){
     
     if(!confirm(`将删除 ${dl.length} 个过期文件（${day}天前），确认？`)) return;
     
-    let dbDelOk = false;
     let storageDelOk = false;
+    let dbDelOk = false;
     let errorMsg = [];
+    let successCount = 0;
+    let failList = [];
+    const MAX_RETRY = 3;
+    
+    // 1. 先尝试删除存储文件（带重试）
     let retryCount = 0;
-    const MAX_RETRY = 2;
-
-    while (retryCount <= MAX_RETRY && !dbDelOk) {
+    while (retryCount < MAX_RETRY && !storageDelOk) {
         try {
-            const { error } = await sb.from('file_notes').delete().in('file_name', dl);
-            if (error) throw error;
-            dbDelOk = true;
-        } catch (err) {
-            retryCount++;
-            if (retryCount <= MAX_RETRY) {
-                console.log(`数据库删除重试 ${retryCount}/${MAX_RETRY}`);
-                await new Promise(r => setTimeout(r, 500));
-            } else {
-                errorMsg.push(`数据库删除失败（重试${MAX_RETRY}次后）：${err.message}`);
-                console.error('数据库删除失败:', err);
+            // 分批删除存储文件，避免超时
+            const batchSize = 20;
+            let batchSuccess = 0;
+            let batchFail = 0;
+            
+            for (let i = 0; i < dl.length; i += batchSize) {
+                const batch = dl.slice(i, i + batchSize);
+                try {
+                    const { error } = await sb.storage.from("files").remove(batch);
+                    if (error) throw error;
+                    batchSuccess += batch.length;
+                } catch (err) {
+                    batchFail += batch.length;
+                    failList.push(...batch);
+                    console.error(`批次删除失败 (${i/batchSize + 1}):`, err);
+                }
             }
-        }
-    }
-
-    retryCount = 0;
-    while (retryCount <= MAX_RETRY && !storageDelOk) {
-        try {
-            const { error } = await sb.storage.from("files").remove(dl);
-            if (error) throw error;
-            storageDelOk = true;
+            
+            successCount = batchSuccess;
+            if (batchFail === 0) {
+                storageDelOk = true;
+            } else {
+                throw new Error(`部分删除失败: ${batchFail} 个文件未删除`);
+            }
         } catch (err) {
             retryCount++;
-            if (retryCount <= MAX_RETRY) {
+            if (retryCount < MAX_RETRY) {
                 console.log(`存储删除重试 ${retryCount}/${MAX_RETRY}`);
-                await new Promise(r => setTimeout(r, 500));
+                await new Promise(r => setTimeout(r, 1000));
             } else {
                 errorMsg.push(`存储文件删除失败（重试${MAX_RETRY}次后）：${err.message}`);
                 console.error('存储文件删除失败:', err);
             }
         }
     }
-
-    if (dbDelOk && storageDelOk) {
-        alert(`✅ 清理完成！共删除 ${dl.length} 个过期文件`);
-    } else if (dbDelOk || storageDelOk) {
-        alert(`⚠️ 清理部分成功，但有异常：\n${errorMsg.join('\n')}\n\n💡 建议点击"数据一致性"按钮检查修复`);
+    
+    // 2. 只有存储删除成功后，才删除数据库记录
+    if (storageDelOk && successCount > 0) {
+        // 只删除成功删除的文件的数据库记录
+        const successFiles = dl.filter(name => !failList.includes(name));
+        if (successFiles.length > 0) {
+            try {
+                await sb.from('file_notes').delete().in('file_name', successFiles);
+                dbDelOk = true;
+            } catch (err) {
+                errorMsg.push(`数据库删除失败：${err.message}`);
+                console.error('数据库删除失败:', err);
+            }
+        }
+    }
+    
+    // 3. 处理结果
+    if (storageDelOk && dbDelOk) {
+        alert(`✅ 清理完成！共删除 ${successCount} 个过期文件`);
+    } else if (storageDelOk && !dbDelOk) {
+        alert(`⚠️ 存储文件已删除（${successCount}个），但数据库记录删除失败：\n${errorMsg.join('\n')}\n\n💡 请使用「清理残留备注」功能清理数据库记录`);
+    } else if (!storageDelOk && successCount > 0) {
+        alert(`⚠️ 部分文件删除成功：${successCount} 个已删除，${dl.length - successCount} 个失败\n\n失败文件：${failList.join(', ')}\n\n💡 请使用「一键清理孤儿」功能处理残留文件`);
     } else {
-        alert(`❌ 清理失败：\n${errorMsg.join('\n')}`);
+        alert(`❌ 清理失败：\n${errorMsg.join('\n')}\n\n💡 请使用「一键清理孤儿」或「查看孤儿文件」功能手动处理`);
     }
     
     loadAllFiles();
@@ -611,9 +649,14 @@ async function autoCleanWhenFull(totalBytes){
         let delList = sorted.slice(0, delCount).map(i=>i.name);
         
         try {
-            await sb.from('file_notes').delete().in('file_name', delList);
-            await sb.storage.from("files").remove(delList);
-            console.log(`✅ 自动清理完成：删除 ${delList.length} 个文件`);
+            // 先删存储，再删数据库
+            const { error: storageError } = await sb.storage.from("files").remove(delList);
+            if (!storageError) {
+                await sb.from('file_notes').delete().in('file_name', delList);
+                console.log(`✅ 自动清理完成：删除 ${delList.length} 个文件`);
+            } else {
+                console.error('自动清理存储失败:', storageError);
+            }
         } catch (err) {
             console.error('自动清理失败:', err);
         }
@@ -672,6 +715,7 @@ window.triggerFileUpload = () => {
     document.getElementById("fileInput").click();
 }
 
+// ========== 修复：加载文件时过滤掉孤儿文件 ==========
 window.loadAllFiles = async function(isSilent = false){
     if (isUserOperating && isSilent) return;
 
@@ -681,7 +725,13 @@ window.loadAllFiles = async function(isSilent = false){
             alert("获取文件列表失败：" + error.message);
             return;
         }
-        allFiles = data || [];
+        
+        // 先获取所有数据库记录
+        await loadAllNotes();
+        
+        // 只保留数据库中有记录的文件（过滤掉孤儿文件）
+        const dbFileNames = new Set(Object.keys(fileMeta));
+        allFiles = (data || []).filter(file => dbFileNames.has(file.name));
         
         allFiles.sort((a, b) => {
             let ta = a.created_at || a.updated_at || '';
@@ -693,7 +743,6 @@ window.loadAllFiles = async function(isSilent = false){
         allFiles.forEach(i => total += i.metadata?.size || 0);
         await autoCleanWhenFull(total);
         updateTotalSpace(total);
-        await loadAllNotes();
         
         renderFiles();
     } catch(e) {
@@ -733,8 +782,10 @@ document.getElementById("fileInput").onchange = async e => {
         existNames.push(storageFileName);
 
         try {
+            // 先上传到存储
             const { error } = await sb.storage.from("files").upload(storageFileName, f);
             if (error) throw error;
+            // 上传成功后再写数据库
             await sb.from('file_notes').upsert([{
                 file_name: storageFileName,
                 uploader: currentLoginUser,
@@ -759,44 +810,27 @@ document.getElementById("fileInput").onchange = async e => {
     loadAllFiles();
 };
 
-// ========== 优化后的单文件删除（带重试机制） ==========
+// ========== 优化后的单文件删除（先删存储，再删数据库） ==========
 window.delOne = async storeName => {
     if(!confirm("确定删除该文件？删除后无法恢复")) return;
     
-    let dbDelOk = false;
     let storageDelOk = false;
+    let dbDelOk = false;
     let errorMsg = [];
     let retryCount = 0;
-    const MAX_RETRY = 2;
+    const MAX_RETRY = 3;
 
-    while (retryCount <= MAX_RETRY && !dbDelOk) {
-        try {
-            const { error } = await sb.from('file_notes').delete().eq('file_name', storeName);
-            if (error) throw error;
-            dbDelOk = true;
-        } catch (err) {
-            retryCount++;
-            if (retryCount <= MAX_RETRY) {
-                console.log(`数据库删除重试 ${retryCount}/${MAX_RETRY}`);
-                await new Promise(r => setTimeout(r, 500));
-            } else {
-                errorMsg.push(`数据库删除失败（重试${MAX_RETRY}次后）：${err.message}`);
-                console.error('数据库删除失败:', err);
-            }
-        }
-    }
-
-    retryCount = 0;
-    while (retryCount <= MAX_RETRY && !storageDelOk) {
+    // 1. 先删除存储文件（带重试）
+    while (retryCount < MAX_RETRY && !storageDelOk) {
         try {
             const { error } = await sb.storage.from("files").remove([storeName]);
             if (error) throw error;
             storageDelOk = true;
         } catch (err) {
             retryCount++;
-            if (retryCount <= MAX_RETRY) {
+            if (retryCount < MAX_RETRY) {
                 console.log(`存储删除重试 ${retryCount}/${MAX_RETRY}`);
-                await new Promise(r => setTimeout(r, 500));
+                await new Promise(r => setTimeout(r, 1000));
             } else {
                 errorMsg.push(`存储文件删除失败（重试${MAX_RETRY}次后）：${err.message}`);
                 console.error('存储文件删除失败:', err);
@@ -804,18 +838,31 @@ window.delOne = async storeName => {
         }
     }
 
-    if (dbDelOk && storageDelOk) {
+    // 2. 存储删除成功后，再删除数据库记录
+    if (storageDelOk) {
+        try {
+            const { error } = await sb.from('file_notes').delete().eq('file_name', storeName);
+            if (error) throw error;
+            dbDelOk = true;
+        } catch (err) {
+            errorMsg.push(`数据库删除失败：${err.message}`);
+            console.error('数据库删除失败:', err);
+        }
+    }
+
+    // 3. 处理结果
+    if (storageDelOk && dbDelOk) {
         alert("✅ 文件删除成功！");
         loadAllFiles();
-    } else if (dbDelOk || storageDelOk) {
-        alert(`⚠️ 部分删除成功，但有异常：\n${errorMsg.join('\n')}\n\n💡 建议点击"数据一致性"按钮检查修复`);
+    } else if (storageDelOk && !dbDelOk) {
+        alert(`⚠️ 存储文件已删除，但数据库记录删除失败：\n${errorMsg.join('\n')}\n\n💡 请使用「清理残留备注」功能清理数据库记录`);
         loadAllFiles();
     } else {
-        alert(`❌ 删除失败：\n${errorMsg.join('\n')}`);
+        alert(`❌ 删除失败：\n${errorMsg.join('\n')}\n\n💡 请使用「一键清理孤儿」功能手动处理`);
     }
 }
 
-// ========== 优化后的批量删除（带重试机制） ==========
+// ========== 优化后的批量删除（先删存储，再删数据库） ==========
 document.getElementById("batchDelete").onclick = async () => {
     let arr = Array.from(document.querySelectorAll(".file-chk:checked")).map(x => x.value);
     if(arr.length === 0) {
@@ -824,62 +871,83 @@ document.getElementById("batchDelete").onclick = async () => {
     }
     if(!confirm(`确定批量删除选中${arr.length}个文件？删除后无法恢复`)) return;
     
-    let dbDelOk = false;
     let storageDelOk = false;
+    let dbDelOk = false;
     let errorMsg = [];
-    let successCount = arr.length;
+    let successCount = 0;
+    let failList = [];
     let retryCount = 0;
-    const MAX_RETRY = 2;
+    const MAX_RETRY = 3;
 
-    while (retryCount <= MAX_RETRY && !dbDelOk) {
+    // 1. 先批量删除存储文件（带重试）
+    while (retryCount < MAX_RETRY && !storageDelOk) {
         try {
-            const { error } = await sb.from('file_notes').delete().in('file_name', arr);
-            if (error) throw error;
-            dbDelOk = true;
+            const batchSize = 20;
+            let batchSuccess = 0;
+            let batchFail = 0;
+            
+            for (let i = 0; i < arr.length; i += batchSize) {
+                const batch = arr.slice(i, i + batchSize);
+                try {
+                    const { error } = await sb.storage.from("files").remove(batch);
+                    if (error) throw error;
+                    batchSuccess += batch.length;
+                } catch (err) {
+                    batchFail += batch.length;
+                    failList.push(...batch);
+                    console.error(`批次删除失败 (${i/batchSize + 1}):`, err);
+                }
+            }
+            
+            successCount = batchSuccess;
+            if (batchFail === 0) {
+                storageDelOk = true;
+            } else {
+                throw new Error(`部分删除失败: ${batchFail} 个文件未删除`);
+            }
         } catch (err) {
             retryCount++;
-            if (retryCount <= MAX_RETRY) {
-                console.log(`数据库批量删除重试 ${retryCount}/${MAX_RETRY}`);
-                await new Promise(r => setTimeout(r, 500));
+            if (retryCount < MAX_RETRY) {
+                console.log(`存储删除重试 ${retryCount}/${MAX_RETRY}`);
+                await new Promise(r => setTimeout(r, 1000));
             } else {
-                errorMsg.push(`数据库批量删除失败（重试${MAX_RETRY}次后）：${err.message}`);
-                console.error('数据库批量删除失败:', err);
+                errorMsg.push(`存储文件删除失败（重试${MAX_RETRY}次后）：${err.message}`);
+                console.error('存储文件删除失败:', err);
             }
         }
     }
 
-    retryCount = 0;
-    while (retryCount <= MAX_RETRY && !storageDelOk) {
-        try {
-            const { error } = await sb.storage.from("files").remove(arr);
-            if (error) throw error;
-            storageDelOk = true;
-        } catch (err) {
-            retryCount++;
-            if (retryCount <= MAX_RETRY) {
-                console.log(`存储批量删除重试 ${retryCount}/${MAX_RETRY}`);
-                await new Promise(r => setTimeout(r, 500));
-            } else {
-                errorMsg.push(`存储文件批量删除失败（重试${MAX_RETRY}次后）：${err.message}`);
-                console.error('存储文件批量删除失败:', err);
+    // 2. 存储删除成功后，再删除数据库记录
+    if (storageDelOk && successCount > 0) {
+        const successFiles = arr.filter(name => !failList.includes(name));
+        if (successFiles.length > 0) {
+            try {
+                await sb.from('file_notes').delete().in('file_name', successFiles);
+                dbDelOk = true;
+            } catch (err) {
+                errorMsg.push(`数据库删除失败：${err.message}`);
+                console.error('数据库删除失败:', err);
             }
         }
     }
 
-    if (dbDelOk && storageDelOk) {
+    // 3. 处理结果
+    if (storageDelOk && dbDelOk) {
         alert(`✅ 批量删除成功！共删除 ${successCount} 个文件`);
         loadAllFiles();
-    } else if (dbDelOk || storageDelOk) {
-        alert(`⚠️ 批量删除部分成功，但有异常：\n${errorMsg.join('\n')}\n\n💡 建议点击"数据一致性"按钮检查修复`);
+    } else if (storageDelOk && !dbDelOk) {
+        alert(`⚠️ 存储文件已删除（${successCount}个），但数据库记录删除失败：\n${errorMsg.join('\n')}\n\n💡 请使用「清理残留备注」功能清理数据库记录`);
         loadAllFiles();
+    } else if (!storageDelOk && successCount > 0) {
+        alert(`⚠️ 部分文件删除成功：${successCount} 个已删除，${arr.length - successCount} 个失败\n\n失败文件：${failList.join(', ')}\n\n💡 请使用「一键清理孤儿」功能处理残留文件`);
     } else {
-        alert(`❌ 批量删除失败：\n${errorMsg.join('\n')}`);
+        alert(`❌ 批量删除失败：\n${errorMsg.join('\n')}\n\n💡 请使用「一键清理孤儿」功能手动处理`);
     }
 }
 
 // ========== 校验清理残留备注 ==========
 window.checkAndCleanOrphanNotes = async function() {
-    alert("开始校验数据，请稍等，文件数量越多等待时间越长");
+    alert("开始校验数据，请稍等...");
     const { data: storageList, error: storageErr } = await sb.storage.from("files").list();
     if(storageErr) return alert("读取存储桶文件列表失败："+storageErr.message);
     const existStoreSet = new Set(storageList.map(item => item.name));
@@ -892,7 +960,7 @@ window.checkAndCleanOrphanNotes = async function() {
         .filter(fileName => !existStoreSet.has(fileName));
     
     if(orphanFileList.length === 0) {
-        return alert("校验完成，不存在残留脏备注记录");
+        return alert("✅ 校验完成，不存在残留脏备注记录");
     }
 
     if(!confirm(`检测到【${orphanFileList.length}】条残留备注记录（对应文件已从存储删除，仅数据库遗留），确认一键删除全部？`)) return;
@@ -904,7 +972,7 @@ window.checkAndCleanOrphanNotes = async function() {
     if(delErr) {
         alert(`清理残留记录失败：${delErr.message}`);
     } else {
-        alert(`成功清理${orphanFileList.length}条残留脏数据，页面自动刷新`);
+        alert(`✅ 成功清理${orphanFileList.length}条残留脏数据，页面自动刷新`);
         loadAllFiles();
     }
 }
@@ -950,6 +1018,7 @@ window.checkAndFixConsistency = async function() {
     if (!confirm(msg + `\n\n是否自动修复这些问题？`)) return;
 
     let fixedCount = 0;
+    // 修复孤儿文件：补充数据库记录
     for (const fileName of result.orphanFiles) {
         try {
             let originName = fileName;
@@ -970,6 +1039,7 @@ window.checkAndFixConsistency = async function() {
         }
     }
 
+    // 清理残留备注
     if (result.orphanNotes.length > 0) {
         try {
             await sb.from('file_notes').delete().in('file_name', result.orphanNotes);
@@ -985,6 +1055,46 @@ window.checkAndFixConsistency = async function() {
         + `总计修复：${fixedCount} 项`);
 
     loadAllFiles();
+}
+
+// ========== 存储统计 ==========
+window.showStorageStats = async function() {
+    const { data: storageList, error: storageErr } = await sb.storage.from("files").list();
+    if (storageErr) return alert("读取存储桶失败：" + storageErr.message);
+    
+    const { data: noteList, error: noteErr } = await sb.from("file_notes").select("file_name");
+    if (noteErr) return alert("读取数据库失败：" + noteErr.message);
+    
+    const dbFileSet = new Set(noteList.map(item => item.file_name));
+    const orphanFiles = storageList.filter(item => !dbFileSet.has(item.name));
+    const normalFiles = storageList.filter(item => dbFileSet.has(item.name));
+    
+    // 计算总大小
+    let totalSize = 0;
+    storageList.forEach(item => totalSize += item.metadata?.size || 0);
+    
+    let msg = `📊 存储桶与数据库对比：\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `📁 存储桶文件总数：${storageList.length}\n`;
+    msg += `📝 数据库记录数：${noteList.length}\n`;
+    msg += `💾 存储总大小：${formatSize(totalSize)}\n`;
+    msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `✅ 正常文件（两者都有）：${normalFiles.length}\n`;
+    msg += `🔧 孤儿文件（有文件无记录）：${orphanFiles.length}\n`;
+    msg += `⚠️ 残留备注（有记录无文件）：${noteList.length - normalFiles.length}\n`;
+    
+    if (orphanFiles.length > 0) {
+        msg += `\n📋 孤儿文件列表（前10个）：\n`;
+        orphanFiles.slice(0, 10).forEach((item, i) => {
+            msg += `  ${i+1}. ${item.name}\n     大小：${formatSize(item.metadata?.size)}\n`;
+        });
+        if (orphanFiles.length > 10) {
+            msg += `  ... 还有 ${orphanFiles.length - 10} 个\n`;
+        }
+        msg += `\n💡 建议使用「查看孤儿文件」或「一键清理孤儿」功能处理`;
+    }
+    
+    alert(msg);
 }
 
 // ========== 查看孤儿文件 ==========
@@ -1006,57 +1116,47 @@ window.viewOrphanFiles = async function() {
     }
     
     let fileList = orphanFiles.map((item, i) => {
-        return `${i+1}. ${item.name} (${formatSize(item.size)}) - ${formatTime(item.created_at)}`;
-    }).join("\n");
+        return `${i+1}. ${item.name}\n   大小：${formatSize(item.size)}  上传时间：${formatTime(item.created_at)}`;
+    }).join("\n\n");
     
     let choice = confirm(
         `🔍 发现 ${orphanFiles.length} 个孤儿文件（存储中存在但数据库无记录）：\n\n`
         + `${fileList}\n\n`
-        + `点击「确定」删除这些孤儿文件\n`
-        + `点击「取消」仅为这些文件补充数据库记录`
+        + `点击「确定」删除这些孤儿文件（从存储中移除）\n`
+        + `点击「取消」仅为这些文件补充数据库记录（让它们显示在列表中）`
     );
     
     if (choice) {
+        // 删除孤儿文件
         if (!confirm(`⚠️ 确定删除这 ${orphanFiles.length} 个孤儿文件吗？此操作不可恢复！`)) return;
         
-        let delSuccess = 0;
-        let delFail = 0;
+        let successCount = 0;
+        let failCount = 0;
+        let failList = [];
         
-        // 先创建临时记录
-        for (const item of orphanFiles) {
+        const batchSize = 20;
+        for (let i = 0; i < orphanFiles.length; i += batchSize) {
+            const batch = orphanFiles.slice(i, i + batchSize);
+            const fileNames = batch.map(item => item.name);
+            
             try {
-                let originName = item.name;
-                const parts = item.name.split("_");
-                if (parts.length >= 2) {
-                    originName = parts.slice(1).join("_");
-                }
-                await sb.from('file_notes').upsert([{
-                    file_name: item.name,
-                    uploader: "系统清理",
-                    note: "【待删除】孤儿文件",
-                    origin_name: originName
-                }]);
+                const { error } = await sb.storage.from("files").remove(fileNames);
+                if (error) throw error;
+                successCount += batch.length;
             } catch (err) {
-                console.error(`创建临时记录失败:`, err);
+                failCount += batch.length;
+                failList.push(...fileNames);
+                console.error('批量删除失败:', err);
             }
         }
         
-        try {
-            await sb.from('file_notes').delete().in('file_name', orphanFiles.map(item => item.name));
-            const { error } = await sb.storage.from("files").remove(orphanFiles.map(item => item.name));
-            if (!error) {
-                delSuccess = orphanFiles.length;
-            } else {
-                throw error;
-            }
-        } catch (err) {
-            alert(`删除失败：${err.message}`);
-            loadAllFiles();
-            return;
+        if (failCount > 0) {
+            alert(`⚠️ 部分删除完成：成功 ${successCount} 个，失败 ${failCount} 个\n\n失败文件：\n${failList.join('\n')}`);
+        } else {
+            alert(`✅ 成功删除全部 ${successCount} 个孤儿文件！`);
         }
-        
-        alert(`✅ 成功删除 ${delSuccess} 个孤儿文件`);
     } else {
+        // 补充数据库记录
         if (!confirm(`确定为 ${orphanFiles.length} 个孤儿文件补充数据库记录？`)) return;
         
         let successCount = 0;
@@ -1080,7 +1180,7 @@ window.viewOrphanFiles = async function() {
             }
         }
         
-        alert(`✅ 成功为 ${successCount} 个孤儿文件补充了数据库记录，现在可以在列表中看到并操作这些文件了！`);
+        alert(`✅ 成功为 ${successCount} 个孤儿文件补充了数据库记录，现在可以在列表中看到并操作这些文件了！\n\n💡 请点击「刷新」按钮查看更新后的列表。`);
     }
     
     loadAllFiles();
@@ -1108,37 +1208,31 @@ window.quickCleanOrphanFiles = async function() {
     
     if (!confirm(`发现 ${orphanFiles.length} 个孤儿文件，确定全部删除？`)) return;
     
-    // 先创建临时记录
-    for (const fileName of orphanFiles) {
+    let successCount = 0;
+    let failCount = 0;
+    
+    const batchSize = 20;
+    for (let i = 0; i < orphanFiles.length; i += batchSize) {
+        const batch = orphanFiles.slice(i, i + batchSize);
         try {
-            let originName = fileName;
-            const parts = fileName.split("_");
-            if (parts.length >= 2) {
-                originName = parts.slice(1).join("_");
+            const { error } = await sb.storage.from("files").remove(batch);
+            if (!error) {
+                successCount += batch.length;
+            } else {
+                throw error;
             }
-            await sb.from('file_notes').upsert([{
-                file_name: fileName,
-                uploader: "系统清理",
-                note: "【已清理】孤儿文件",
-                origin_name: originName
-            }]);
         } catch (err) {
-            console.error(`创建临时记录失败:`, err);
+            failCount += batch.length;
+            console.error(`批量删除失败 (批次 ${i/batchSize + 1}):`, err);
         }
     }
     
-    let delSuccess = 0;
-    try {
-        await sb.from('file_notes').delete().in('file_name', orphanFiles);
-        const { error } = await sb.storage.from("files").remove(orphanFiles);
-        if (!error) delSuccess = orphanFiles.length;
-    } catch (err) {
-        alert(`删除失败：${err.message}`);
-        loadAllFiles();
-        return;
+    if (failCount > 0) {
+        alert(`⚠️ 部分删除完成：成功删除 ${successCount} 个，失败 ${failCount} 个\n\n💡 请再次运行「一键清理孤儿」或使用「查看孤儿文件」手动处理`);
+    } else {
+        alert(`✅ 成功删除全部 ${successCount} 个孤儿文件！`);
     }
     
-    alert(`✅ 成功删除 ${delSuccess} 个孤儿文件`);
     loadAllFiles();
 }
 
