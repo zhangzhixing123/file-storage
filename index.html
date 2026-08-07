@@ -29,6 +29,7 @@
         button.danger {background:#f56c6c;}
         button.warn {background:#e6a23c;}
         button.copy {background:#19b500;}
+        button.purple {background:#9b59b6;}
         .search-wrap {display: flex;gap: 5px;flex-wrap: wrap;align-items: center;}
         input.search, input.date-input {padding: 8px 12px;border: 1px solid #ddd;border-radius: 6px;min-width: 150px;}
         .file-item {background: #fff;padding: 10px 12px;margin: 6px 0;border-radius: 8px;display: flex;justify-content: space-between;align-items: center;flex-wrap:wrap;gap:8px;}
@@ -163,6 +164,8 @@
             <button id="batchDelete" class="danger">🗑️ 批量删除</button>
             <button class="warn" onclick="batchCheckAndDelStorage()">🔍 批量校验删除后台残留文件</button>
             <button class="warn" onclick="checkAndCleanOrphanNotes()">🔧 校验清理残留备注</button>
+            <!-- 新增：清理无备注记录的存储文件 -->
+            <button class="purple" onclick="cleanStorageFilesWithoutNote()">🧹 清理无备注记录存储文件</button>
             
             <button class="copy" onclick="copySelectedFileNames()">📋 批量复制纯文件名</button>
 
@@ -750,6 +753,106 @@ window.delOne = async storeName => {
         alert(`存储文件已删除，但数据库备注删除失败：${err.message}\n可使用【校验清理残留备注】清理脏数据`);
     }
     alert("删除操作执行完成，页面刷新");
+    loadAllFiles();
+}
+
+// ==================== 新增功能：清理无备注记录的存储文件 ====================
+window.cleanStorageFilesWithoutNote = async function() {
+    // 第一步：获取存储桶所有文件
+    alert("正在扫描存储桶文件与数据库记录，文件数量越多等待时间越长...");
+    
+    const { data: storageFiles, error: storageErr } = await sb.storage.from("files").list();
+    if(storageErr) {
+        return alert("读取存储桶文件失败：" + storageErr.message);
+    }
+    
+    if(storageFiles.length === 0) {
+        return alert("存储桶中没有文件");
+    }
+    
+    // 第二步：获取数据库 file_notes 中所有记录的文件名
+    const { data: noteRecords, error: noteErr } = await sb.from("file_notes").select("file_name");
+    if(noteErr) {
+        return alert("读取数据库备注记录失败：" + noteErr.message);
+    }
+    
+    // 构建数据库记录文件名集合
+    const noteFileSet = new Set(noteRecords.map(item => item.file_name));
+    
+    // 第三步：找出在存储桶中存在，但在 file_notes 中没有记录的文件
+    const filesWithoutNote = storageFiles
+        .map(item => item.name)
+        .filter(fileName => !noteFileSet.has(fileName));
+    
+    if(filesWithoutNote.length === 0) {
+        return alert("✅ 校验完成：所有存储桶文件在数据库中都有对应的备注记录，无需清理");
+    }
+    
+    // 显示详情并确认删除
+    let detailMsg = `发现 ${filesWithoutNote.length} 个存储文件在数据库中无备注记录：\n\n`;
+    detailMsg += filesWithoutNote.slice(0, 20).join("\n");
+    if(filesWithoutNote.length > 20) {
+        detailMsg += `\n... 共 ${filesWithoutNote.length} 个文件`;
+    }
+    detailMsg += `\n\n⚠️ 这些文件将直接从存储桶删除，释放存储空间`;
+    
+    if(!confirm(detailMsg)) {
+        return;
+    }
+    
+    // 第四步：分批删除存储文件（避免一次删除太多导致超时）
+    const batchSize = 50;
+    let successCount = 0;
+    let failCount = 0;
+    let failList = [];
+    
+    for(let i = 0; i < filesWithoutNote.length; i += batchSize) {
+        const batch = filesWithoutNote.slice(i, i + batchSize);
+        try {
+            const { error: delErr } = await sb.storage.from("files").remove(batch);
+            if(delErr) {
+                // 如果批量删除失败，尝试单个删除
+                for(const fileName of batch) {
+                    try {
+                        await sb.storage.from("files").remove([fileName]);
+                        successCount++;
+                    } catch(singleErr) {
+                        failCount++;
+                        failList.push(fileName);
+                    }
+                }
+            } else {
+                successCount += batch.length;
+            }
+        } catch(err) {
+            // 批量删除失败，尝试单个删除
+            for(const fileName of batch) {
+                try {
+                    await sb.storage.from("files").remove([fileName]);
+                    successCount++;
+                } catch(singleErr) {
+                    failCount++;
+                    failList.push(fileName);
+                }
+            }
+        }
+    }
+    
+    // 第五步：显示结果
+    let resultMsg = `🧹 清理完成！\n\n`;
+    resultMsg += `✅ 成功删除：${successCount} 个文件\n`;
+    resultMsg += `❌ 删除失败：${failCount} 个文件\n`;
+    if(failList.length > 0) {
+        resultMsg += `\n失败文件列表（前20个）：\n${failList.slice(0, 20).join("\n")}`;
+        if(failList.length > 20) {
+            resultMsg += `\n... 共 ${failList.length} 个文件失败`;
+        }
+    }
+    resultMsg += `\n\n💡 存储空间已释放，页面即将刷新`;
+    
+    alert(resultMsg);
+    
+    // 刷新页面数据
     loadAllFiles();
 }
 
