@@ -96,6 +96,24 @@
         .result-box.error {background: #fdf0f0;border-left: 3px solid #f56c6c;}
         .result-box.warn {background: #fdf6ec;border-left: 3px solid #e6a23c;}
         .result-box.info {background: #ecf5ff;border-left: 3px solid #409eff;}
+        .capacity-warning {
+            background: #fdf6ec;
+            border: 2px solid #e6a23c;
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            color: #e67e22;
+            font-weight: bold;
+        }
+        .capacity-danger {
+            background: #fdf0f0;
+            border: 2px solid #f56c6c;
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            color: #f56c6c;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -121,6 +139,7 @@
     <div class="user-name-tip">当前登录人：<span id="nowLoginUser">暂无</span></div>
     <div class="total-count" id="totalCountText">筛选(文件名/备注/上传人)总文件数：0 个</div>
     <div class="range-count" id="rangeCountText">时间段内文件数：未选择时间范围</div>
+    <div id="capacityStatus"></div>
 
     <div class="content-area">
         <div class="storage-box">
@@ -244,6 +263,7 @@
 const FIX_PWD = "123456";
 const AUTO_REFRESH_INTERVAL = 10000;
 const PAGE_LIMIT = 1000;
+const CAPACITY_THRESHOLD = 95; // 使用率超过95%触发自动清理
 
 let autoRefreshTimer;
 let currentLoginUser = "";
@@ -319,6 +339,111 @@ function showResult(msg, type = 'info') {
     const box = document.getElementById('cleanResult');
     const cls = type === 'error' ? 'result-box error' : type === 'warn' ? 'result-box warn' : type === 'success' ? 'result-box success' : 'result-box info';
     box.innerHTML = `<div class="${cls}">${msg}</div>`;
+}
+
+// ================================================================
+// 📊 检查容量并自动清理
+// ================================================================
+async function checkAndAutoClean() {
+    try {
+        const storageFiles = await getAllStorageFiles();
+        let totalBytes = 0;
+        storageFiles.forEach(f => totalBytes += f.metadata?.size || 0);
+        
+        const totalBytesLimit = totalStorageGB * 1024 * 1024 * 1024;
+        const usagePercent = totalBytesLimit > 0 ? (totalBytes / totalBytesLimit * 100) : 0;
+        
+        console.log(`📊 存储使用率: ${usagePercent.toFixed(2)}%`);
+        
+        // 如果使用率超过阈值，触发自动清理
+        if (usagePercent >= CAPACITY_THRESHOLD) {
+            console.log(`⚠️ 存储使用率 ${usagePercent.toFixed(2)}% 超过阈值 ${CAPACITY_THRESHOLD}%，触发自动清理`);
+            
+            // 显示警告
+            const statusDiv = document.getElementById('capacityStatus');
+            statusDiv.innerHTML = `<div class="capacity-danger">⚠️ 存储使用率 ${usagePercent.toFixed(2)}%，已超过 ${CAPACITY_THRESHOLD}% 阈值，正在自动清理旧文件...</div>`;
+            
+            // 执行自动清理
+            await autoCleanOldFiles(storageFiles);
+            
+            // 重新加载显示
+            await loadAllFiles();
+            return true;
+        } else if (usagePercent >= 80) {
+            // 显示预警
+            const statusDiv = document.getElementById('capacityStatus');
+            statusDiv.innerHTML = `<div class="capacity-warning">⚠️ 存储使用率 ${usagePercent.toFixed(2)}%，接近容量上限，建议清理旧文件</div>`;
+        } else {
+            document.getElementById('capacityStatus').innerHTML = '';
+        }
+        
+        return false;
+    } catch(err) {
+        console.error('容量检查失败:', err);
+        return false;
+    }
+}
+
+// ================================================================
+// 🗑️ 自动清理旧文件（按时间排序，删除最旧的文件）
+// ================================================================
+async function autoCleanOldFiles(storageFiles) {
+    if (!storageFiles || storageFiles.length === 0) {
+        console.log('📭 存储桶中没有文件，无需清理');
+        return;
+    }
+    
+    // 按创建时间排序（旧的在前）
+    const sorted = [...storageFiles].sort((a, b) => {
+        const ta = a.created_at || a.updated_at || '';
+        const tb = b.created_at || b.updated_at || '';
+        return new Date(ta) - new Date(tb);
+    });
+    
+    // 计算需要删除的数量（删除10%最旧的文件）
+    const delCount = Math.max(1, Math.ceil(sorted.length * 0.1));
+    const delList = sorted.slice(0, delCount).map(f => f.name);
+    
+    console.log(`🗑️ 自动清理 ${delCount} 个最旧的文件:`, delList);
+    
+    try {
+        // 分批删除存储文件
+        const batchSize = 50;
+        let successCount = 0;
+        
+        for(let i = 0; i < delList.length; i += batchSize) {
+            const batch = delList.slice(i, i + batchSize);
+            try {
+                await sb.storage.from("files").remove(batch);
+                successCount += batch.length;
+                console.log(`✅ 已删除 ${successCount}/${delList.length} 个文件`);
+            } catch(err) {
+                console.error(`批量删除失败:`, err);
+                // 逐个重试
+                for(const fileName of batch) {
+                    try {
+                        await sb.storage.from("files").remove([fileName]);
+                        successCount++;
+                    } catch(e) {
+                        console.error(`删除失败: ${fileName}`, e);
+                    }
+                }
+            }
+        }
+        
+        // 清理数据库记录
+        try {
+            await sb.from('file_notes').delete().in('file_name', delList);
+            console.log(`✅ 已清理 ${delList.length} 条数据库记录`);
+        } catch(err) {
+            console.warn('数据库记录清理失败:', err);
+        }
+        
+        alert(`🔄 存储使用率超过 ${CAPACITY_THRESHOLD}%，已自动删除 ${successCount} 个最旧的文件释放空间`);
+        
+    } catch(err) {
+        console.error('自动清理失败:', err);
+    }
 }
 
 window.copySingleFileName = async function(storeName){
@@ -554,33 +679,116 @@ document.getElementById('delDaySelect').addEventListener('change',function(){
     setDelText();
 })
 
+// ================================================================
+// 🔥 自动清理过期文件
+// ================================================================
 window.runAutoDelete = async function(){
     let day = parseInt(document.getElementById('delDaySelect').value);
-    if(day === 0){ alert("请选择清理周期"); return; }
-    let bd = getBeforeDayStr(day);
-    const bucketAll = await getAllStorageFiles();
-    const realSet = new Set(bucketAll.map(i=>i.name));
-    let expiredRealFiles = allFiles.filter(i => {
-        const cTime = i.created_at || i.updated_at || '';
-        const dayStr = cTime.split('T')[0];
-        return dayStr < bd && realSet.has(i.name);
-    }).map(i=>i.name);
-    if(expiredRealFiles.length === 0){ alert("无过期可清理的存储文件"); return; }
-    if(!confirm(`将删除${expiredRealFiles.length}个过期存储文件，确认？`)) return;
-    try{
-        await sb.storage.from("files").remove(expiredRealFiles);
-    }catch(err){
-        alert(`过期文件存储删除失败：${err.message}，操作终止`);
-        loadAllFiles();
-        return;
+    if(day === 0){ alert("请选择清理周期（如7天、15天、30天等）"); return; }
+    
+    try {
+        const bucketAll = await getAllStorageFiles();
+        if(!bucketAll || bucketAll.length === 0) {
+            alert("存储桶中没有文件");
+            return;
+        }
+        
+        const cutoffDate = getBeforeDayStr(day);
+        console.log(`📅 截止日期: ${cutoffDate}，将删除 ${day} 天前的文件`);
+        
+        const expiredFiles = [];
+        const keptFiles = [];
+        
+        for(const file of bucketAll) {
+            const fileTime = file.created_at || file.updated_at || '';
+            const dayStr = fileTime.split('T')[0];
+            if(dayStr < cutoffDate) {
+                expiredFiles.push(file.name);
+            } else {
+                keptFiles.push(file.name);
+            }
+        }
+        
+        console.log(`📂 存储桶总文件数: ${bucketAll.length}`);
+        console.log(`🗑️ 过期文件数: ${expiredFiles.length}`);
+        
+        if(expiredFiles.length === 0) {
+            alert(`没有 ${day} 天前的过期文件需要清理`);
+            return;
+        }
+        
+        if(!confirm(`将删除 ${expiredFiles.length} 个 ${day} 天前的过期文件，确认？`)) {
+            return;
+        }
+        
+        const batchSize = 50;
+        let successCount = 0;
+        let failCount = 0;
+        const failList = [];
+        
+        for(let i = 0; i < expiredFiles.length; i += batchSize) {
+            const batch = expiredFiles.slice(i, i + batchSize);
+            console.log(`🔄 删除第 ${Math.floor(i/batchSize)+1} 批，${batch.length} 个文件...`);
+            
+            try {
+                const { error: delErr } = await sb.storage.from("files").remove(batch);
+                if(delErr) {
+                    for(const fileName of batch) {
+                        try {
+                            await sb.storage.from("files").remove([fileName]);
+                            successCount++;
+                        } catch(e) {
+                            failCount++;
+                            failList.push(fileName);
+                            console.error(`删除失败: ${fileName}`, e);
+                        }
+                    }
+                } else {
+                    successCount += batch.length;
+                }
+            } catch(err) {
+                for(const fileName of batch) {
+                    try {
+                        await sb.storage.from("files").remove([fileName]);
+                        successCount++;
+                    } catch(e) {
+                        failCount++;
+                        failList.push(fileName);
+                        console.error(`删除失败: ${fileName}`, e);
+                    }
+                }
+            }
+        }
+        
+        if(successCount > 0) {
+            try {
+                const deletedFiles = expiredFiles.filter(f => !failList.includes(f));
+                if(deletedFiles.length > 0) {
+                    await sb.from('file_notes').delete().in('file_name', deletedFiles);
+                    console.log(`✅ 已清理 ${deletedFiles.length} 条数据库记录`);
+                }
+            } catch(err) {
+                console.warn('数据库清理失败:', err);
+            }
+        }
+        
+        let result = `🧹 自动清理完成！\n\n`;
+        result += `📅 清理 ${day} 天前的文件\n`;
+        result += `📂 总文件数：${bucketAll.length}\n`;
+        result += `✅ 成功删除：${successCount} 个过期文件\n`;
+        result += `❌ 删除失败：${failCount} 个文件\n`;
+        result += `📊 保留：${keptFiles.length} 个文件\n`;
+        if(failList.length > 0) {
+            result += `\n失败文件列表（前20个）：\n${failList.slice(0, 20).join("\n")}`;
+        }
+        
+        alert(result);
+        await loadAllFiles();
+        
+    } catch(err) {
+        console.error('自动清理失败:', err);
+        alert(`自动清理失败：${err.message}`);
     }
-    try{
-        await sb.from('file_notes').delete().in('file_name', expiredRealFiles);
-    }catch(err){
-        alert(`存储文件已删除，数据库备注清理失败`);
-    }
-    alert("自动清理过期文件完成");
-    loadAllFiles();
 }
 
 window.saveStorage = function(){
@@ -588,6 +796,8 @@ window.saveStorage = function(){
     if(isNaN(v)||v<=0){ alert("请输入合法容量"); return; }
     totalStorageGB = v;
     localStorage.setItem('totalStorageGB', v);
+    // 保存后检查容量
+    checkAndAutoClean();
     loadAllFiles();
 }
 
@@ -596,8 +806,19 @@ function updateTotalSpace(totalBytes){
     let pct = total > 0 ? (totalBytes / total * 100) : 0;
     let used = (totalBytes / 1024 / 1024).toFixed(2);
     let max = (totalStorageGB * 1024).toFixed(2);
-    document.getElementById('storageProgress').style.width = pct+'%';
+    document.getElementById('storageProgress').style.width = Math.min(pct, 100)+'%';
     document.getElementById('storageText').innerText = `总大小：${used} MB / 容量：${max} MB  占用：${pct.toFixed(2)}%`;
+    
+    // 检查是否需要显示警告
+    if(pct >= CAPACITY_THRESHOLD) {
+        document.getElementById('capacityStatus').innerHTML = 
+            `<div class="capacity-danger">⚠️ 存储使用率 ${pct.toFixed(2)}%，已超过 ${CAPACITY_THRESHOLD}% 阈值，系统将自动清理旧文件</div>`;
+    } else if(pct >= 80) {
+        document.getElementById('capacityStatus').innerHTML = 
+            `<div class="capacity-warning">⚠️ 存储使用率 ${pct.toFixed(2)}%，接近容量上限，建议清理旧文件</div>`;
+    } else {
+        document.getElementById('capacityStatus').innerHTML = '';
+    }
 }
 
 window.checkAll = () => {
@@ -647,6 +868,11 @@ window.loadAllFiles = async function(isSilent = false){
         document.getElementById('totalCountText').innerText = `存储桶总文件数：${allFiles.length} 个`;
         
         renderFiles();
+        
+        // 检查容量（非静默模式）
+        if (!isSilent) {
+            await checkAndAutoClean();
+        }
     } catch(e) {
         console.error("加载失败:", e);
         alert("获取文件列表异常：" + e.message);
@@ -707,7 +933,9 @@ document.getElementById("fileInput").onchange = async e => {
 
     e.target.value = "";
     currentPage = 1;
-    loadAllFiles();
+    await loadAllFiles();
+    // 上传后检查容量
+    await checkAndAutoClean();
 };
 
 // ================================================================
@@ -725,20 +953,16 @@ window.showAllFiles = async function() {
         
         const { data: noteRecords } = await sb.from("file_notes").select("file_name, origin_name");
         const dbFileNames = new Set();
-        const dbOriginNames = new Set();
         if(noteRecords) {
             noteRecords.forEach(item => {
                 if(item.file_name) dbFileNames.add(item.file_name);
-                if(item.origin_name) dbOriginNames.add(item.origin_name);
             });
         }
         
-        // 对比分类
         const inBoth = [];
         const onlyInStorage = [];
         const onlyInDB = [];
         
-        // 存储桶有，数据库也有
         for(const file of storageFiles) {
             if(dbFileNames.has(file.name)) {
                 inBoth.push(file.name);
@@ -747,7 +971,6 @@ window.showAllFiles = async function() {
             }
         }
         
-        // 数据库有，存储桶没有
         for(const fileName of dbFileNames) {
             const exists = storageFiles.some(f => f.name === fileName);
             if(!exists) {
@@ -824,7 +1047,6 @@ window.deleteOrphanFiles = async function() {
             });
         }
         
-        // 找出存储桶有但数据库没有的文件
         const orphanFiles = [];
         const matchedFiles = [];
         
@@ -837,7 +1059,6 @@ window.deleteOrphanFiles = async function() {
         }
         
         console.log(`✅ 匹配: ${matchedFiles.length}, 🗑️ 孤立: ${orphanFiles.length}`);
-        console.log('孤立文件列表:', orphanFiles);
         
         if(orphanFiles.length === 0) {
             showResult(`✅ 所有 ${storageFiles.length} 个文件在数据库中都有记录`, 'success');
