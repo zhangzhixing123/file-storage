@@ -114,6 +114,19 @@
             color: #f56c6c;
             font-weight: bold;
         }
+        .auto-clean-log {
+            background: #f0f9f0;
+            border: 1px solid #19b500;
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin: 4px 0;
+            font-size: 13px;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .auto-clean-log.error {background: #fdf0f0;border-color: #f56c6c;}
+        .auto-clean-log.warn {background: #fdf6ec;border-color: #e6a23c;}
     </style>
 </head>
 <body>
@@ -140,6 +153,7 @@
     <div class="total-count" id="totalCountText">筛选(文件名/备注/上传人)总文件数：0 个</div>
     <div class="range-count" id="rangeCountText">时间段内文件数：未选择时间范围</div>
     <div id="capacityStatus"></div>
+    <div id="autoCleanLog" style="margin-top:10px;"></div>
 
     <div class="content-area">
         <div class="storage-box">
@@ -167,23 +181,39 @@
             <span style="font-size:12px;color:#666;margin-left:10px;">当前：<span id="nowDelSet">不自动删除</span></span>
         </div>
 
-        <!-- ====== 核心清理工具 ====== -->
-        <div class="clean-tool-box">
-            <div class="title">🧹 后台数据一致性清理工具</div>
+        <!-- ====== 自动化清理状态显示 ====== -->
+        <div class="clean-tool-box" style="border-left-color: #19b500;">
+            <div class="title">🤖 自动数据一致性校验与清理</div>
             <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
-                <button class="danger big" onclick="deleteOrphanFiles()">🗑️ 删除存储桶中无数据库记录的文件</button>
-                <span class="desc">（存储桶有文件 → file_notes 无记录 → 删除存储文件）</span>
+                <span style="color:#19b500;font-weight:bold;">● 系统已自动运行</span>
+                <span class="desc">系统启动时自动校验存储桶与数据库一致性，发现不一致自动删除</span>
             </div>
-            <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
-                <button class="warn" onclick="deleteOrphanNotes()">🔧 删除数据库中无存储文件的记录</button>
-                <span class="desc">（file_notes 有记录 → 存储桶无文件 → 删除数据库记录）</span>
+            <div id="autoStatus" style="font-size:13px;color:#666;">
+                上次自动校验：<span id="lastCheckTime">等待中...</span> | 
+                状态：<span id="checkStatus" style="color:#19b500;">就绪</span>
             </div>
-            <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;">
-                <button class="warn" onclick="showAllFiles()">📋 显示存储桶与数据库对比</button>
-                <span class="desc">（查看存储桶和数据库的对比情况）</span>
-            </div>
-            <div id="cleanResult" style="margin-top:10px;"></div>
+            <div id="autoCheckResult" style="margin-top:10px;"></div>
         </div>
+
+        <!-- ====== 手动工具（保留但折叠） ====== -->
+        <details style="margin-top:10px;">
+            <summary style="cursor:pointer;color:#888;font-size:14px;padding:5px 0;">🔧 手动清理工具（点击展开）</summary>
+            <div class="clean-tool-box" style="border-left-color: #e67e22;margin-top:5px;">
+                <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+                    <button class="danger" onclick="deleteOrphanFiles()">🗑️ 删除存储桶中无数据库记录的文件</button>
+                    <span class="desc">（存储桶有文件 → file_notes 无记录 → 删除存储文件）</span>
+                </div>
+                <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+                    <button class="warn" onclick="deleteOrphanNotes()">🔧 删除数据库中无存储文件的记录</button>
+                    <span class="desc">（file_notes 有记录 → 存储桶无文件 → 删除数据库记录）</span>
+                </div>
+                <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;">
+                    <button class="warn" onclick="showAllFiles()">📋 显示存储桶与数据库对比</button>
+                    <span class="desc">（查看存储桶和数据库的对比情况）</span>
+                </div>
+                <div id="cleanResult" style="margin-top:10px;"></div>
+            </div>
+        </details>
 
         <div class="tool-bar">
             <button onclick="triggerFileUpload()">🖼️ 上传文件/图片</button>
@@ -263,10 +293,11 @@
 const FIX_PWD = "123456";
 const AUTO_REFRESH_INTERVAL = 10000;
 const PAGE_LIMIT = 1000;
-const CAPACITY_THRESHOLD = 95; // 使用率超过95%触发自动清理
+const CAPACITY_THRESHOLD = 95;
 
 let autoRefreshTimer;
 let currentLoginUser = "";
+let lastAutoCheckTime = null;
 
 let sb; 
 let allFiles = [];
@@ -302,7 +333,7 @@ function userLogin(){
 }
 
 // ================================================================
-// 🚀 获取存储桶所有文件（支持分页）
+// 🚀 获取存储桶所有文件
 // ================================================================
 async function getAllStorageFiles() {
     let allFiles = [];
@@ -327,18 +358,166 @@ async function getAllStorageFiles() {
             if (data.length < PAGE_LIMIT) {
                 hasMore = false;
             }
-            console.log(`📂 已获取 ${allFiles.length} 个文件...`);
         }
     }
     
-    console.log(`📂 共获取 ${allFiles.length} 个文件`);
     return allFiles;
+}
+
+function addLog(msg, type = 'info') {
+    const logDiv = document.getElementById('autoCleanLog');
+    const cls = type === 'error' ? 'auto-clean-log error' : type === 'warn' ? 'auto-clean-log warn' : 'auto-clean-log';
+    const time = new Date().toLocaleString();
+    logDiv.innerHTML += `<div class="${cls}">[${time}] ${msg}</div>`;
+    logDiv.scrollTop = logDiv.scrollHeight;
+    console.log(`[自动清理] ${msg}`);
+}
+
+function showAutoResult(msg, type = 'info') {
+    const box = document.getElementById('autoCheckResult');
+    const cls = type === 'error' ? 'result-box error' : type === 'warn' ? 'result-box warn' : type === 'success' ? 'result-box success' : 'result-box info';
+    box.innerHTML = `<div class="${cls}">${msg}</div>`;
 }
 
 function showResult(msg, type = 'info') {
     const box = document.getElementById('cleanResult');
     const cls = type === 'error' ? 'result-box error' : type === 'warn' ? 'result-box warn' : type === 'success' ? 'result-box success' : 'result-box info';
     box.innerHTML = `<div class="${cls}">${msg}</div>`;
+}
+
+// ================================================================
+// 🤖 自动数据一致性校验与清理（核心功能）
+// ================================================================
+async function autoCheckAndClean() {
+    try {
+        addLog('🔄 开始自动数据一致性校验...', 'info');
+        document.getElementById('checkStatus').textContent = '校验中...';
+        document.getElementById('checkStatus').style.color = '#e67e22';
+        
+        // 1. 获取存储桶所有文件
+        const storageFiles = await getAllStorageFiles();
+        if (!storageFiles || storageFiles.length === 0) {
+            addLog('📭 存储桶中没有文件，跳过校验', 'warn');
+            document.getElementById('checkStatus').textContent = '就绪（无文件）';
+            document.getElementById('checkStatus').style.color = '#888';
+            return;
+        }
+        
+        // 2. 获取数据库所有记录
+        const { data: noteRecords } = await sb.from("file_notes").select("file_name");
+        const dbFileNames = new Set();
+        if(noteRecords) {
+            noteRecords.forEach(item => {
+                if(item.file_name) dbFileNames.add(item.file_name);
+            });
+        }
+        
+        // 3. 对比找出差异
+        const orphanFiles = [];      // 存储桶有，数据库无 → 应删除
+        const orphanNotes = [];      // 数据库有，存储桶无 → 应清理
+        
+        for(const file of storageFiles) {
+            if(!dbFileNames.has(file.name)) {
+                orphanFiles.push(file.name);
+            }
+        }
+        
+        for(const fileName of dbFileNames) {
+            const exists = storageFiles.some(f => f.name === fileName);
+            if(!exists) {
+                orphanNotes.push(fileName);
+            }
+        }
+        
+        // 4. 记录结果
+        lastAutoCheckTime = new Date();
+        document.getElementById('lastCheckTime').textContent = lastAutoCheckTime.toLocaleString();
+        
+        addLog(`📊 校验完成：存储桶 ${storageFiles.length} 个文件，数据库 ${dbFileNames.size} 条记录`, 'info');
+        addLog(`📊 孤立存储文件：${orphanFiles.length} 个，孤立数据库记录：${orphanNotes.length} 条`, orphanFiles.length > 0 || orphanNotes.length > 0 ? 'warn' : 'info');
+        
+        // 5. 自动删除孤立存储文件
+        let deletedCount = 0;
+        let cleanedCount = 0;
+        
+        if (orphanFiles.length > 0) {
+            addLog(`🗑️ 发现 ${orphanFiles.length} 个孤立存储文件，开始自动删除...`, 'warn');
+            
+            const batchSize = 50;
+            for(let i = 0; i < orphanFiles.length; i += batchSize) {
+                const batch = orphanFiles.slice(i, i + batchSize);
+                try {
+                    await sb.storage.from("files").remove(batch);
+                    deletedCount += batch.length;
+                    addLog(`✅ 已删除 ${deletedCount}/${orphanFiles.length} 个孤立文件`, 'info');
+                } catch(err) {
+                    // 逐个重试
+                    for(const fileName of batch) {
+                        try {
+                            await sb.storage.from("files").remove([fileName]);
+                            deletedCount++;
+                        } catch(e) {
+                            addLog(`❌ 删除失败: ${fileName} - ${e.message}`, 'error');
+                        }
+                    }
+                }
+            }
+            
+            if (deletedCount > 0) {
+                // 同步清理数据库记录
+                try {
+                    const deletedFiles = orphanFiles.slice(0, deletedCount);
+                    await sb.from('file_notes').delete().in('file_name', deletedFiles);
+                    addLog(`✅ 已清理 ${deletedFiles.length} 条相关数据库记录`, 'info');
+                } catch(err) {
+                    addLog(`⚠️ 数据库记录清理失败: ${err.message}`, 'warn');
+                }
+            }
+        }
+        
+        // 6. 自动清理孤立数据库记录
+        if (orphanNotes.length > 0) {
+            addLog(`🔧 发现 ${orphanNotes.length} 条孤立数据库记录，开始自动清理...`, 'warn');
+            
+            try {
+                await sb.from('file_notes').delete().in('file_name', orphanNotes);
+                cleanedCount = orphanNotes.length;
+                addLog(`✅ 已清理 ${cleanedCount} 条孤立数据库记录`, 'info');
+            } catch(err) {
+                addLog(`❌ 清理孤立数据库记录失败: ${err.message}`, 'error');
+            }
+        }
+        
+        // 7. 显示结果
+        let resultMsg = '';
+        if (deletedCount > 0 || cleanedCount > 0) {
+            resultMsg = `✅ 自动清理完成！\n\n`;
+            resultMsg += `🗑️ 删除孤立存储文件：${deletedCount} 个\n`;
+            resultMsg += `🔧 清理孤立数据库记录：${cleanedCount} 条\n`;
+            resultMsg += `📊 当前存储桶文件：${storageFiles.length - deletedCount} 个\n`;
+            resultMsg += `📊 当前数据库记录：${dbFileNames.size - cleanedCount} 条`;
+            showAutoResult(resultMsg, 'success');
+        } else {
+            showAutoResult(`✅ 数据一致，无需清理\n\n存储桶 ${storageFiles.length} 个文件，数据库 ${dbFileNames.size} 条记录，完全匹配`, 'success');
+        }
+        
+        document.getElementById('checkStatus').textContent = `就绪（${deletedCount > 0 || cleanedCount > 0 ? '已清理' : '一致'}）`;
+        document.getElementById('checkStatus').style.color = deletedCount > 0 || cleanedCount > 0 ? '#e67e22' : '#19b500';
+        
+        // 8. 重新加载页面数据
+        if (deletedCount > 0 || cleanedCount > 0) {
+            await loadAllFiles(true);
+        }
+        
+        addLog(`🏁 自动校验完成，删除 ${deletedCount} 个文件，清理 ${cleanedCount} 条记录`, 'info');
+        
+    } catch(err) {
+        console.error('自动校验失败:', err);
+        addLog(`❌ 自动校验失败: ${err.message}`, 'error');
+        showAutoResult(`❌ 自动校验失败：${err.message}`, 'error');
+        document.getElementById('checkStatus').textContent = '异常';
+        document.getElementById('checkStatus').style.color = '#f56c6c';
+    }
 }
 
 // ================================================================
@@ -355,22 +534,16 @@ async function checkAndAutoClean() {
         
         console.log(`📊 存储使用率: ${usagePercent.toFixed(2)}%`);
         
-        // 如果使用率超过阈值，触发自动清理
         if (usagePercent >= CAPACITY_THRESHOLD) {
-            console.log(`⚠️ 存储使用率 ${usagePercent.toFixed(2)}% 超过阈值 ${CAPACITY_THRESHOLD}%，触发自动清理`);
+            addLog(`⚠️ 存储使用率 ${usagePercent.toFixed(2)}% 超过阈值 ${CAPACITY_THRESHOLD}%，触发自动清理`, 'warn');
             
-            // 显示警告
             const statusDiv = document.getElementById('capacityStatus');
             statusDiv.innerHTML = `<div class="capacity-danger">⚠️ 存储使用率 ${usagePercent.toFixed(2)}%，已超过 ${CAPACITY_THRESHOLD}% 阈值，正在自动清理旧文件...</div>`;
             
-            // 执行自动清理
             await autoCleanOldFiles(storageFiles);
-            
-            // 重新加载显示
-            await loadAllFiles();
+            await loadAllFiles(true);
             return true;
         } else if (usagePercent >= 80) {
-            // 显示预警
             const statusDiv = document.getElementById('capacityStatus');
             statusDiv.innerHTML = `<div class="capacity-warning">⚠️ 存储使用率 ${usagePercent.toFixed(2)}%，接近容量上限，建议清理旧文件</div>`;
         } else {
@@ -385,29 +558,25 @@ async function checkAndAutoClean() {
 }
 
 // ================================================================
-// 🗑️ 自动清理旧文件（按时间排序，删除最旧的文件）
+// 🗑️ 自动清理旧文件
 // ================================================================
 async function autoCleanOldFiles(storageFiles) {
     if (!storageFiles || storageFiles.length === 0) {
-        console.log('📭 存储桶中没有文件，无需清理');
         return;
     }
     
-    // 按创建时间排序（旧的在前）
     const sorted = [...storageFiles].sort((a, b) => {
         const ta = a.created_at || a.updated_at || '';
         const tb = b.created_at || b.updated_at || '';
         return new Date(ta) - new Date(tb);
     });
     
-    // 计算需要删除的数量（删除10%最旧的文件）
     const delCount = Math.max(1, Math.ceil(sorted.length * 0.1));
     const delList = sorted.slice(0, delCount).map(f => f.name);
     
-    console.log(`🗑️ 自动清理 ${delCount} 个最旧的文件:`, delList);
+    addLog(`🗑️ 自动清理 ${delCount} 个最旧的文件`, 'warn');
     
     try {
-        // 分批删除存储文件
         const batchSize = 50;
         let successCount = 0;
         
@@ -416,33 +585,28 @@ async function autoCleanOldFiles(storageFiles) {
             try {
                 await sb.storage.from("files").remove(batch);
                 successCount += batch.length;
-                console.log(`✅ 已删除 ${successCount}/${delList.length} 个文件`);
             } catch(err) {
-                console.error(`批量删除失败:`, err);
-                // 逐个重试
                 for(const fileName of batch) {
                     try {
                         await sb.storage.from("files").remove([fileName]);
                         successCount++;
                     } catch(e) {
-                        console.error(`删除失败: ${fileName}`, e);
+                        addLog(`❌ 删除失败: ${fileName}`, 'error');
                     }
                 }
             }
         }
         
-        // 清理数据库记录
         try {
             await sb.from('file_notes').delete().in('file_name', delList);
-            console.log(`✅ 已清理 ${delList.length} 条数据库记录`);
         } catch(err) {
-            console.warn('数据库记录清理失败:', err);
+            addLog(`⚠️ 数据库记录清理失败: ${err.message}`, 'warn');
         }
         
-        alert(`🔄 存储使用率超过 ${CAPACITY_THRESHOLD}%，已自动删除 ${successCount} 个最旧的文件释放空间`);
+        addLog(`✅ 容量自动清理完成，删除 ${successCount} 个文件`, 'success');
         
     } catch(err) {
-        console.error('自动清理失败:', err);
+        addLog(`❌ 容量自动清理失败: ${err.message}`, 'error');
     }
 }
 
@@ -680,7 +844,7 @@ document.getElementById('delDaySelect').addEventListener('change',function(){
 })
 
 // ================================================================
-// 🔥 自动清理过期文件
+// 🔥 手动清理过期文件
 // ================================================================
 window.runAutoDelete = async function(){
     let day = parseInt(document.getElementById('delDaySelect').value);
@@ -694,8 +858,6 @@ window.runAutoDelete = async function(){
         }
         
         const cutoffDate = getBeforeDayStr(day);
-        console.log(`📅 截止日期: ${cutoffDate}，将删除 ${day} 天前的文件`);
-        
         const expiredFiles = [];
         const keptFiles = [];
         
@@ -708,9 +870,6 @@ window.runAutoDelete = async function(){
                 keptFiles.push(file.name);
             }
         }
-        
-        console.log(`📂 存储桶总文件数: ${bucketAll.length}`);
-        console.log(`🗑️ 过期文件数: ${expiredFiles.length}`);
         
         if(expiredFiles.length === 0) {
             alert(`没有 ${day} 天前的过期文件需要清理`);
@@ -728,8 +887,6 @@ window.runAutoDelete = async function(){
         
         for(let i = 0; i < expiredFiles.length; i += batchSize) {
             const batch = expiredFiles.slice(i, i + batchSize);
-            console.log(`🔄 删除第 ${Math.floor(i/batchSize)+1} 批，${batch.length} 个文件...`);
-            
             try {
                 const { error: delErr } = await sb.storage.from("files").remove(batch);
                 if(delErr) {
@@ -740,7 +897,6 @@ window.runAutoDelete = async function(){
                         } catch(e) {
                             failCount++;
                             failList.push(fileName);
-                            console.error(`删除失败: ${fileName}`, e);
                         }
                     }
                 } else {
@@ -754,7 +910,6 @@ window.runAutoDelete = async function(){
                     } catch(e) {
                         failCount++;
                         failList.push(fileName);
-                        console.error(`删除失败: ${fileName}`, e);
                     }
                 }
             }
@@ -765,24 +920,13 @@ window.runAutoDelete = async function(){
                 const deletedFiles = expiredFiles.filter(f => !failList.includes(f));
                 if(deletedFiles.length > 0) {
                     await sb.from('file_notes').delete().in('file_name', deletedFiles);
-                    console.log(`✅ 已清理 ${deletedFiles.length} 条数据库记录`);
                 }
             } catch(err) {
                 console.warn('数据库清理失败:', err);
             }
         }
         
-        let result = `🧹 自动清理完成！\n\n`;
-        result += `📅 清理 ${day} 天前的文件\n`;
-        result += `📂 总文件数：${bucketAll.length}\n`;
-        result += `✅ 成功删除：${successCount} 个过期文件\n`;
-        result += `❌ 删除失败：${failCount} 个文件\n`;
-        result += `📊 保留：${keptFiles.length} 个文件\n`;
-        if(failList.length > 0) {
-            result += `\n失败文件列表（前20个）：\n${failList.slice(0, 20).join("\n")}`;
-        }
-        
-        alert(result);
+        alert(`✅ 清理完成！成功删除 ${successCount} 个过期文件${failCount > 0 ? `，${failCount} 个失败` : ''}`);
         await loadAllFiles();
         
     } catch(err) {
@@ -796,7 +940,6 @@ window.saveStorage = function(){
     if(isNaN(v)||v<=0){ alert("请输入合法容量"); return; }
     totalStorageGB = v;
     localStorage.setItem('totalStorageGB', v);
-    // 保存后检查容量
     checkAndAutoClean();
     loadAllFiles();
 }
@@ -809,7 +952,6 @@ function updateTotalSpace(totalBytes){
     document.getElementById('storageProgress').style.width = Math.min(pct, 100)+'%';
     document.getElementById('storageText').innerText = `总大小：${used} MB / 容量：${max} MB  占用：${pct.toFixed(2)}%`;
     
-    // 检查是否需要显示警告
     if(pct >= CAPACITY_THRESHOLD) {
         document.getElementById('capacityStatus').innerHTML = 
             `<div class="capacity-danger">⚠️ 存储使用率 ${pct.toFixed(2)}%，已超过 ${CAPACITY_THRESHOLD}% 阈值，系统将自动清理旧文件</div>`;
@@ -869,8 +1011,9 @@ window.loadAllFiles = async function(isSilent = false){
         
         renderFiles();
         
-        // 检查容量（非静默模式）
+        // 🔥 自动执行数据一致性校验（非静默模式）
         if (!isSilent) {
+            await autoCheckAndClean();
             await checkAndAutoClean();
         }
     } catch(e) {
@@ -934,12 +1077,12 @@ document.getElementById("fileInput").onchange = async e => {
     e.target.value = "";
     currentPage = 1;
     await loadAllFiles();
-    // 上传后检查容量
+    await autoCheckAndClean();
     await checkAndAutoClean();
 };
 
 // ================================================================
-// 📋 显示存储桶与数据库对比
+// 📋 显示存储桶与数据库对比（手动）
 // ================================================================
 window.showAllFiles = async function() {
     showResult('⏳ 正在获取数据...', 'info');
@@ -951,7 +1094,7 @@ window.showAllFiles = async function() {
             return;
         }
         
-        const { data: noteRecords } = await sb.from("file_notes").select("file_name, origin_name");
+        const { data: noteRecords } = await sb.from("file_notes").select("file_name");
         const dbFileNames = new Set();
         if(noteRecords) {
             noteRecords.forEach(item => {
@@ -1013,13 +1156,6 @@ window.showAllFiles = async function() {
         
         showResult(msg, onlyInStorage.length > 0 ? 'warn' : 'success');
         
-        console.log('=== 数据对比结果 ===');
-        console.log('存储桶文件数:', storageFiles.length);
-        console.log('数据库记录数:', dbFileNames.size);
-        console.log('两者都有:', inBoth.length);
-        console.log('仅存储桶有:', onlyInStorage);
-        console.log('仅数据库有:', onlyInDB);
-        
     } catch(err) {
         console.error('获取失败:', err);
         showResult(`❌ 获取失败：${err.message}`, 'error');
@@ -1027,7 +1163,7 @@ window.showAllFiles = async function() {
 }
 
 // ================================================================
-// 🗑️ 删除存储桶中无数据库记录的文件
+// 🗑️ 手动删除存储桶中无数据库记录的文件
 // ================================================================
 window.deleteOrphanFiles = async function() {
     showResult('⏳ 正在扫描对比...', 'info');
@@ -1058,14 +1194,12 @@ window.deleteOrphanFiles = async function() {
             }
         }
         
-        console.log(`✅ 匹配: ${matchedFiles.length}, 🗑️ 孤立: ${orphanFiles.length}`);
-        
         if(orphanFiles.length === 0) {
             showResult(`✅ 所有 ${storageFiles.length} 个文件在数据库中都有记录`, 'success');
             return;
         }
         
-        let msg = `🔍 发现 ${orphanFiles.length} 个孤立文件（存储桶存在，但数据库中无记录）：\n\n`;
+        let msg = `🔍 发现 ${orphanFiles.length} 个孤立文件：\n\n`;
         const showCount = Math.min(orphanFiles.length, 50);
         for(let i = 0; i < showCount; i++) {
             msg += `  ${i+1}. ${orphanFiles[i]}\n`;
@@ -1085,12 +1219,8 @@ window.deleteOrphanFiles = async function() {
         let failCount = 0;
         const failList = [];
         
-        showResult(`⏳ 正在删除 ${orphanFiles.length} 个文件...`, 'info');
-        
         for(let i = 0; i < orphanFiles.length; i += batchSize) {
             const batch = orphanFiles.slice(i, i + batchSize);
-            console.log(`🔄 删除第 ${Math.floor(i/batchSize)+1} 批，${batch.length} 个文件...`);
-            
             try {
                 const { error: delErr } = await sb.storage.from("files").remove(batch);
                 if(delErr) {
@@ -1101,7 +1231,6 @@ window.deleteOrphanFiles = async function() {
                         } catch(e) {
                             failCount++;
                             failList.push(fileName);
-                            console.error(`删除失败: ${fileName}`, e);
                         }
                     }
                 } else {
@@ -1115,17 +1244,14 @@ window.deleteOrphanFiles = async function() {
                     } catch(e) {
                         failCount++;
                         failList.push(fileName);
-                        console.error(`删除失败: ${fileName}`, e);
                     }
                 }
             }
         }
         
         let result = `🧹 清理完成！\n\n`;
-        result += `📊 总文件数：${storageFiles.length}\n`;
         result += `✅ 成功删除：${successCount} 个孤立文件\n`;
         result += `❌ 删除失败：${failCount} 个文件\n`;
-        result += `📊 保留：${matchedFiles.length} 个有记录的文件\n`;
         if(failList.length > 0) {
             result += `\n失败文件列表（前20个）：\n${failList.slice(0, 20).join("\n")}`;
         }
@@ -1140,7 +1266,7 @@ window.deleteOrphanFiles = async function() {
 }
 
 // ================================================================
-// 🔧 删除数据库中无存储文件的记录
+// 🔧 手动删除数据库中无存储文件的记录
 // ================================================================
 window.deleteOrphanNotes = async function() {
     showResult('⏳ 正在校验...', 'info');
@@ -1168,7 +1294,7 @@ window.deleteOrphanNotes = async function() {
             return;
         }
         
-        let msg = `发现 ${orphanNotes.length} 条残留记录（数据库有记录，但存储桶中无文件）：\n\n`;
+        let msg = `发现 ${orphanNotes.length} 条残留记录：\n\n`;
         const showCount = Math.min(orphanNotes.length, 20);
         for(let i = 0; i < showCount; i++) {
             msg += `  ${i+1}. ${orphanNotes[i]}\n`;
