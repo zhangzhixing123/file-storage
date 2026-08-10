@@ -161,8 +161,8 @@
                 <span class="desc">（file_notes 有记录 → 存储桶无文件 → 删除数据库记录）</span>
             </div>
             <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;">
-                <button class="danger" onclick="forceDeleteBySuffix()">🔥 强制删除含 "SET" 的文件</button>
-                <span class="desc">（删除存储桶中文件名包含 SET 的所有文件）</span>
+                <button class="danger" onclick="showAllFiles()">📋 显示所有存储桶文件</button>
+                <span class="desc">（查看存储桶中所有文件名）</span>
             </div>
             <div id="cleanResult" style="margin-top:10px;"></div>
         </div>
@@ -680,8 +680,77 @@ document.getElementById("fileInput").onchange = async e => {
 };
 
 // ================================================================
-// 🎯 核心功能1：删除存储桶中在 file_notes 没有对应记录的文件
-// 支持多种匹配方式：精确匹配、去掉时间戳前缀匹配、模糊匹配
+// 📋 显示所有存储桶文件
+// ================================================================
+window.showAllFiles = async function() {
+    showResult('⏳ 正在获取存储桶文件列表...', 'info');
+    
+    try {
+        const { data: storageFiles, error: storageErr } = await sb.storage.from("files").list();
+        if(storageErr) {
+            showResult(`❌ 读取存储桶失败：${storageErr.message}`, 'error');
+            return;
+        }
+        
+        if(!storageFiles || storageFiles.length === 0) {
+            showResult('📭 存储桶中没有文件', 'warn');
+            return;
+        }
+        
+        // 获取数据库记录
+        const { data: noteRecords } = await sb.from("file_notes").select("file_name");
+        const noteSet = new Set();
+        if(noteRecords) {
+            noteRecords.forEach(item => {
+                if(item.file_name) noteSet.add(item.file_name);
+            });
+        }
+        
+        // 分类
+        const matched = [];
+        const orphan = [];
+        for(const file of storageFiles) {
+            if(noteSet.has(file.name)) {
+                matched.push(file.name);
+            } else {
+                orphan.push(file.name);
+            }
+        }
+        
+        let msg = `📂 存储桶文件总数：${storageFiles.length}\n`;
+        msg += `✅ 数据库中已有记录：${matched.length} 个\n`;
+        msg += `❌ 数据库中无记录（可删除）：${orphan.length} 个\n\n`;
+        
+        if(orphan.length > 0) {
+            msg += `📋 可删除的文件列表（前50个）：\n`;
+            const showCount = Math.min(orphan.length, 50);
+            for(let i = 0; i < showCount; i++) {
+                msg += `  ${i+1}. ${orphan[i]}\n`;
+            }
+            if(orphan.length > 50) {
+                msg += `  ... 共 ${orphan.length} 个文件\n`;
+            }
+        } else {
+            msg += `✅ 所有文件在数据库中都有记录，无需清理`;
+        }
+        
+        showResult(msg, orphan.length > 0 ? 'warn' : 'success');
+        
+        // 同时在控制台输出
+        console.log('=== 存储桶文件列表 ===');
+        console.log('总文件数:', storageFiles.length);
+        console.log('有记录的文件:', matched);
+        console.log('无记录的文件（可删除）:', orphan);
+        
+    } catch(err) {
+        console.error('获取文件列表失败:', err);
+        showResult(`❌ 获取失败：${err.message}`, 'error');
+    }
+}
+
+// ================================================================
+// 🎯 核心功能：删除存储桶中在 file_notes 没有对应记录的文件
+// 使用最简单的精确匹配
 // ================================================================
 window.deleteOrphanFiles = async function() {
     showResult('⏳ 正在扫描对比存储桶与数据库记录...', 'info');
@@ -699,9 +768,10 @@ window.deleteOrphanFiles = async function() {
             return;
         }
         console.log(`📂 存储桶文件数: ${storageFiles.length}`);
-        console.log('存储桶文件列表:', storageFiles.map(f => f.name));
+        const storageNames = storageFiles.map(f => f.name);
+        console.log('存储桶文件列表:', storageNames);
         
-        // 2. 获取 file_notes 所有记录
+        // 2. 获取 file_notes 所有记录（精确匹配）
         console.log("📄 正在读取数据库记录...");
         const { data: noteRecords, error: noteErr } = await sb.from("file_notes").select("file_name, origin_name");
         if(noteErr) {
@@ -710,102 +780,36 @@ window.deleteOrphanFiles = async function() {
         }
         console.log(`📄 数据库记录数: ${noteRecords ? noteRecords.length : 0}`);
         
-        // 3. 构建多种匹配集合
-        const exactMatchSet = new Set();      // 精确匹配
-        const suffixMatchSet = new Set();      // 去掉时间戳前缀后的匹配
-        const fuzzyMatchSet = new Set();       // 模糊匹配（包含关系）
-        
+        // 3. 构建精确匹配集合（只使用 file_name 字段进行精确匹配）
+        const exactMatchSet = new Set();
         if(noteRecords) {
             noteRecords.forEach(item => {
-                const fileName = item.file_name || '';
-                const originName = item.origin_name || '';
-                
-                // 精确匹配
-                if(fileName) exactMatchSet.add(fileName);
-                if(originName) exactMatchSet.add(originName);
-                
-                // 去掉时间戳前缀匹配（格式：时间戳_文件名）
-                if(fileName && fileName.includes('_')) {
-                    const parts = fileName.split('_');
-                    if(parts.length >= 2) {
-                        const suffix = parts.slice(1).join('_');
-                        suffixMatchSet.add(suffix);
-                    }
-                }
-                if(originName && originName.includes('_')) {
-                    const parts = originName.split('_');
-                    if(parts.length >= 2) {
-                        const suffix = parts.slice(1).join('_');
-                        suffixMatchSet.add(suffix);
-                    }
-                }
-                
-                // 模糊匹配（取文件名主体）
-                if(fileName) {
-                    const base = fileName.replace(/\.[^.]+$/, ''); // 去掉扩展名
-                    fuzzyMatchSet.add(base);
-                    // 如果文件名包含下划线，也加入
-                    if(base.includes('_')) {
-                        const parts = base.split('_');
-                        parts.forEach(p => { if(p.length > 2) fuzzyMatchSet.add(p); });
-                    }
+                if(item.file_name) {
+                    exactMatchSet.add(item.file_name);
                 }
             });
         }
-        
         console.log(`📄 精确匹配集大小: ${exactMatchSet.size}`);
-        console.log(`📄 后缀匹配集大小: ${suffixMatchSet.size}`);
-        console.log(`📄 模糊匹配集大小: ${fuzzyMatchSet.size}`);
         
-        // 4. 找出孤立文件（存储桶有，数据库无）
+        // 4. 找出孤立文件（存储桶有，数据库无 - 精确匹配）
         const orphanFiles = [];
         const matchedFiles = [];
         
-        for(const file of storageFiles) {
-            const name = file.name;
-            let isMatched = false;
-            let matchType = '';
-            
-            // 精确匹配
+        for(const name of storageNames) {
             if(exactMatchSet.has(name)) {
-                isMatched = true;
-                matchType = '精确匹配';
-            }
-            // 后缀匹配（去掉时间戳前缀）
-            else if(name.includes('_')) {
-                const parts = name.split('_');
-                if(parts.length >= 2) {
-                    const suffix = parts.slice(1).join('_');
-                    if(suffixMatchSet.has(suffix)) {
-                        isMatched = true;
-                        matchType = '后缀匹配';
-                    }
-                }
-            }
-            // 模糊匹配
-            else {
-                const base = name.replace(/\.[^.]+$/, '');
-                for(const fuzz of fuzzyMatchSet) {
-                    if(base.includes(fuzz) || fuzz.includes(base)) {
-                        isMatched = true;
-                        matchType = '模糊匹配';
-                        break;
-                    }
-                }
-            }
-            
-            if(isMatched) {
-                matchedFiles.push({ name, matchType });
+                matchedFiles.push(name);
             } else {
                 orphanFiles.push(name);
             }
         }
         
         console.log(`✅ 匹配上的文件数: ${matchedFiles.length}`);
+        console.log('匹配上的文件:', matchedFiles);
         console.log(`🗑️ 孤立文件数: ${orphanFiles.length}`);
+        console.log('孤立文件列表:', orphanFiles);
         
         if(orphanFiles.length === 0) {
-            showResult(`✅ 所有存储桶文件在数据库中都有记录，无需清理\n\n匹配详情：${matchedFiles.length} 个文件已匹配`, 'success');
+            showResult(`✅ 所有存储桶文件在数据库中都有记录，无需清理`, 'success');
             return;
         }
         
@@ -818,8 +822,7 @@ window.deleteOrphanFiles = async function() {
         if(orphanFiles.length > 30) {
             msg += `  ... 共 ${orphanFiles.length} 个文件\n`;
         }
-        msg += `\n⚠️ 这些文件将直接从存储桶永久删除！\n`;
-        msg += `💡 匹配到的文件：${matchedFiles.length} 个（已跳过）`;
+        msg += `\n⚠️ 这些文件将直接从存储桶永久删除！`;
         
         if(!confirm(msg)) {
             showResult('⏸️ 操作已取消', 'warn');
@@ -968,99 +971,6 @@ window.deleteOrphanNotes = async function() {
     } catch(err) {
         console.error('清理失败:', err);
         showResult(`❌ 清理失败：${err.message}`, 'error');
-    }
-}
-
-// ================================================================
-// 🔥 强制删除：删除存储桶中文件名包含 "SET" 的文件
-// ================================================================
-window.forceDeleteBySuffix = async function() {
-    const keyword = 'SET';
-    showResult(`⏳ 正在查找文件名包含 "${keyword}" 的文件...`, 'info');
-    
-    try {
-        const { data: storageFiles, error: storageErr } = await sb.storage.from("files").list();
-        if(storageErr) {
-            showResult(`❌ 读取存储桶失败：${storageErr.message}`, 'error');
-            return;
-        }
-        
-        // 找出文件名包含 "SET" 的文件
-        const targetFiles = storageFiles
-            .filter(f => f.name.includes(keyword))
-            .map(f => f.name);
-        
-        if(targetFiles.length === 0) {
-            showResult(`📭 未找到文件名包含 "${keyword}" 的文件`, 'warn');
-            return;
-        }
-        
-        console.log(`🔥 找到 ${targetFiles.length} 个包含 "${keyword}" 的文件:`, targetFiles);
-        
-        let msg = `🔥 找到 ${targetFiles.length} 个文件名包含 "${keyword}" 的文件：\n\n`;
-        const showCount = Math.min(targetFiles.length, 30);
-        for(let i = 0; i < showCount; i++) {
-            msg += `  ${i+1}. ${targetFiles[i]}\n`;
-        }
-        if(targetFiles.length > 30) {
-            msg += `  ... 共 ${targetFiles.length} 个文件\n`;
-        }
-        msg += `\n⚠️ 这些文件将直接从存储桶永久删除！`;
-        
-        if(!confirm(msg)) {
-            showResult('⏸️ 操作已取消', 'warn');
-            return;
-        }
-        
-        // 分批删除
-        const batchSize = 20;
-        let successCount = 0;
-        let failCount = 0;
-        const failList = [];
-        
-        for(let i = 0; i < targetFiles.length; i += batchSize) {
-            const batch = targetFiles.slice(i, i + batchSize);
-            try {
-                const { error: delErr } = await sb.storage.from("files").remove(batch);
-                if(delErr) {
-                    for(const fileName of batch) {
-                        try {
-                            await sb.storage.from("files").remove([fileName]);
-                            successCount++;
-                        } catch(e) {
-                            failCount++;
-                            failList.push(fileName);
-                        }
-                    }
-                } else {
-                    successCount += batch.length;
-                }
-            } catch(err) {
-                for(const fileName of batch) {
-                    try {
-                        await sb.storage.from("files").remove([fileName]);
-                        successCount++;
-                    } catch(e) {
-                        failCount++;
-                        failList.push(fileName);
-                    }
-                }
-            }
-        }
-        
-        let result = `🔥 强制删除完成！\n\n`;
-        result += `✅ 成功删除：${successCount} 个文件\n`;
-        result += `❌ 删除失败：${failCount} 个文件\n`;
-        if(failList.length > 0) {
-            result += `\n失败列表（前20个）：\n${failList.slice(0, 20).join("\n")}`;
-        }
-        
-        showResult(result, successCount > 0 ? 'success' : 'warn');
-        await loadAllFiles();
-        
-    } catch(err) {
-        console.error('强制删除失败:', err);
-        showResult(`❌ 强制删除失败：${err.message}`, 'error');
     }
 }
 
